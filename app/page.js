@@ -1,101 +1,114 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+
+const Home = () => {
+  const categories = [
+    {
+      title: 'Create',
+      image: '/images/create.png',
+      href: '/create',
+      description: 'Create and customize your own Excel template'
+    },
+    {
+      title: 'Business',
+      image: '/images/business.png',
+      href: '/business',
+      description: 'Professional business templates for your organization'
+    },
+    {
+      title: 'Marketing',
+      image: '/images/marketing.png',
+      href: '/marketing',
+      description: 'Effective marketing templates to boost your campaigns'
+    },
+    {
+      title: 'Multi-Purpose',
+      image: '/images/multi.png',
+      href: '/multi',
+      description: 'Versatile templates for various needs and projects'
+    },
+    {
+      title: 'Education',
+      image: '/images/education.png',
+      href: '/edu',
+      description: 'Educational templates for learning and teaching'
+    }
+  ];
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="min-h-[calc(100vh-56px)] bg-gradient-to-b from-white to-blue-50">
+      <div className="max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Hero Section */}
+        <section className="text-center mb-10 animate-fadeIn">
+          <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600 mb-4">
+            Free Excel Mapping Templates
+          </h1>
+          <div className="max-w-3xl mx-auto">
+            <p className="text-base md:text-lg text-gray-600 mb-4">
+              Choose from our extensive collection of professionally designed Excel templates to streamline your work and boost productivity. Whether you're managing business operations, planning marketing campaigns, or organizing educational resources, we have the perfect template for you.
+            </p>
+            <p className="text-base md:text-lg text-gray-600">
+              Simply select a category below to explore templates, or create your own custom template to match your specific needs. All templates are free to use and fully customizable.
+            </p>
+          </div>
+        </section>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+        {/* Categories Section */}
+        <div className="flex justify-center mb-10">
+          <div className="w-full overflow-hidden">
+            <div className="overflow-x-auto">
+              <div className="flex justify-center min-w-max">
+                <section className="flex gap-8">
+                  {categories.map((category, index) => (
+                    <div
+                      key={category.title}
+                      className="group animate-fadeIn w-[300px]"
+                      style={{ animationDelay: `${index * 100}ms` }}
+                    >
+                      <Link href={category.href} className="block">
+                        <div className="bg-white rounded-xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl transform hover:-translate-y-1 h-full">
+                          <div className="relative h-[200px] overflow-hidden">
+                            <div className="absolute inset-0 transition-transform duration-300 transform group-hover:scale-105">
+                              <Image
+                                src={category.image}
+                                alt={category.title}
+                                fill
+                                style={{ objectFit: 'contain', padding: '20px' }}
+                                className="transition-transform duration-300"
+                                priority={index < 2}
+                              />
+                            </div>
+                          </div>
+                          <div className="p-6 bg-white">
+                            <h2 className="text-lg md:text-xl font-semibold text-gray-800 mb-3 group-hover:text-blue-500 transition-colors">
+                              {category.title}
+                            </h2>
+                            <p className="text-base text-gray-600 leading-relaxed">
+                              {category.description}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    </div>
+                  ))}
+                </section>
+              </div>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Footer Section */}
+        <div className="text-center">
+          <p className="text-base text-gray-500">
+            All templates are professionally designed and regularly updated. Need help? Contact our support team.
+          </p>
+        </div>
+      </div>
     </div>
   );
-}
+};
+
+export default Home;
