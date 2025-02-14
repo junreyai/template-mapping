@@ -58,9 +58,9 @@ export default function Marketing() {
     }
   };
 
-  const handleRemoveFile = (indexToRemove) => {
-    setUploadedFiles(files => files.filter((_, index) => index !== indexToRemove));
-    if (selectedFile && uploadedFiles[indexToRemove]?.id === selectedFile.id) {
+  const handleRemoveFile = (file) => {
+    setUploadedFiles(files => files.filter(f => f.id !== file.id));
+    if (selectedFile && uploadedFiles.find(f => f.id === file.id)?.id === selectedFile.id) {
       setSelectedFile(null);
       setShowMapping(false);
       setWorkbookData(null);
@@ -354,7 +354,7 @@ export default function Marketing() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleRemoveFile(index);
+                            handleRemoveFile(file);
                           }}
                           className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
@@ -397,7 +397,7 @@ export default function Marketing() {
             )}
           </div>
 
-          {/* Template Section */}
+          {/* Template File Section */}
           <div className="mt-6">
             <h3 className="text-lg font-medium mb-4 text-gray-700">Template File</h3>
             {isLoading ? (
@@ -407,7 +407,9 @@ export default function Marketing() {
             ) : templateFile ? (
               <div className="space-y-2">
                 <div 
-                  className="w-full border rounded-lg px-4 py-2 transition-colors group bg-blue-100 text-gray-800 border-blue-400"
+                  className={`w-full border rounded-lg px-4 py-2 transition-colors group ${
+                    'bg-blue-100 text-gray-800 border-blue-400'
+                  }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center" style={{ minWidth: '200px' }}>
@@ -443,6 +445,45 @@ export default function Marketing() {
                 Error loading template. Please refresh the page.
               </div>
             )}
+
+            {/* Template Actions */}
+            {showMapping && (
+              <div className="mt-4">
+                {!generatedTemplate ? (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleGenerateTemplate}
+                      disabled={!selectedFile || Object.keys(mappings).length === 0}
+                      className={`px-6 py-3 rounded-lg transition-colors ${
+                        selectedFile && Object.keys(mappings).length > 0
+                          ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Generate Template
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-green-700">Click the ICON to download.</span>
+                      <button
+                        onClick={handleDownloadTemplate}
+                        className="px-4 py-2 transition-colors text-sm hover:bg-green-100 rounded-lg"
+                        title="Download template"
+                      >
+                        <Image 
+                          src="/download.png"
+                          alt="Download template"
+                          width={20}
+                          height={20}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -461,15 +502,14 @@ export default function Marketing() {
                 <MappingInterface 
                   workbookData={workbookData}
                   templateData={templateData}
+                  mappings={mappings}
                   onGenerateTemplate={handleMappingChange}
                 />
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-center h-[200px] text-lg text-gray-500">
-              {selectedFile 
-                ? "Click Process to start mapping" 
-                : "Select a source file to process"}
+              {selectedFile ? 'Processing...' : 'Select a source file to start mapping'}
             </div>
           )}
         </div>
