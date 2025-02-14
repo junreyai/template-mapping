@@ -1,11 +1,53 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function MappingInterface({ workbookData = [], templateData = [], onGenerateTemplate }) {
   const [activeSheet, setActiveSheet] = useState(0);
   const [mappings, setMappings] = useState({});
   const [activeSelect, setActiveSelect] = useState(null);
+
+  const findSimilarField = (templateField) => {
+    if (!workbookData || workbookData.length === 0) return null;
+
+    // Clean up the field name for comparison
+    const cleanField = templateField.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Search through all sheets
+    for (const sheet of workbookData) {
+      for (const header of sheet.headers) {
+        const cleanHeader = header.field.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanField === cleanHeader) {
+          return `${sheet.name}|${header.field}`;
+        }
+      }
+    }
+    return null;
+  };
+
+  // Auto-map fields when workbookData changes
+  useEffect(() => {
+    if (!templateData || !templateData[activeSheet] || !workbookData) return;
+
+    const newMappings = { ...mappings };
+    const templateSheetName = templateData[activeSheet].name;
+
+    templateData[activeSheet].headers.forEach(header => {
+      const templateField = header.field;
+      const templateKey = `${templateSheetName}|${templateField}`;
+      
+      // Only map if not already mapped
+      if (!newMappings[templateKey]) {
+        const similarField = findSimilarField(templateField);
+        if (similarField) {
+          newMappings[templateKey] = similarField;
+        }
+      }
+    });
+
+    setMappings(newMappings);
+    onGenerateTemplate(newMappings);
+  }, [workbookData, templateData, activeSheet]);
 
   const handleMapping = (templateField, value) => {
     if (!templateData || !templateData[activeSheet]) return;
@@ -54,7 +96,7 @@ export default function MappingInterface({ workbookData = [], templateData = [],
           <button
             key={sheet.name}
             onClick={() => setActiveSheet(index)}
-            className={`px-4 py-2 rounded-lg text-sm whitespace-nowrap ${
+            className={`px-4 py-2 rounded-t-lg text-sm whitespace-nowrap ${
               index === activeSheet
                 ? 'bg-[#64afec] text-white'
                 : getSheetHasMappings(sheet.name)
