@@ -19,22 +19,57 @@ export default function Business() {
   const [isLoading, setIsLoading] = useState(true);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [templateFiles, setTemplateFiles] = useState([]);
+  const [error, setError] = useState(null);
+  const [selectedTemplateFile, setSelectedTemplateFile] = useState(null);
 
   // Load template from Supabase on component mount
   useEffect(() => {
     const loadTemplate = async () => {
+      const bucketName = 'freetemplate';
+      const folderPath = 'business/';
+
       try {
         setIsLoading(true);
-        const { data, error } = await supabase.storage
-          .from('freetemplate')
-          .download('business/business.xlsx');
+        setError(null);
 
-        if (error) {
-          throw error;
+        // Fetch the list of files from the specified bucket/folder
+        const { data, error: listError } = await supabase.storage
+          .from(bucketName)
+          .list(folderPath, { limit: 10, offset: 0 });
+
+        console.log('Fetched files data:', data);
+
+        if (listError) {
+          setError(listError.message);
+          toast.error('Error loading template files');
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          setError('No template files found in this folder.');
+          toast.error('No template files found');
+          return;
+        }
+
+        // Store all template files
+        setTemplateFiles(data);
+
+        // Get the first template file by default
+        const templateFile = data[0];
+
+        // Get the download URL for the file
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from(bucketName)
+          .download(`${folderPath}${templateFile.name}`);
+
+        if (downloadError) {
+          setError(downloadError.message);
+          toast.error('Error downloading template');
+          return;
         }
 
         // Convert blob to array buffer
-        const arrayBuffer = await data.arrayBuffer();
+        const arrayBuffer = await fileData.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
 
         // Read the template file
@@ -53,14 +88,21 @@ export default function Business() {
         }).filter(sheet => sheet.headers.length > 0);
 
         if (sheets.length === 0) {
+          setError('No valid headers found in template');
           throw new Error('No valid headers found in template');
         }
 
-        setTemplateFile({ name: 'business.xlsx', data: uint8Array });
+        setTemplateFile({ 
+          id: templateFile.id || '',
+          name: templateFile.name, 
+          data: uint8Array,
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        setSelectedTemplateFile(templateFile);
         setTemplateData(sheets);
-        setTemplateFiles([{ name: 'business.xlsx', data: uint8Array, id: 1 }]);
       } catch (error) {
         console.error('Error loading template:', error);
+        setError(error.message || 'Error loading business template');
         toast.error('Error loading business template');
       } finally {
         setIsLoading(false);
@@ -300,6 +342,62 @@ export default function Business() {
     }
   }, [generatedTemplate, selectedFile]);
 
+  const handleSelectTemplate = async (templateFile) => {
+    const bucketName = 'freetemplate';
+    const folderPath = 'business/';
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Get the download URL for the selected file
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from(bucketName)
+        .download(`${folderPath}${templateFile.name}`);
+
+      if (downloadError) {
+        setError(downloadError.message);
+        toast.error('Error downloading template');
+        return;
+      }
+
+      // Convert blob to array buffer
+      const arrayBuffer = await fileData.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      // Read the template file
+      const workbook = XLSX.read(uint8Array, { type: 'array' });
+      
+      // Process template sheets
+      const sheets = workbook.SheetNames.map(name => {
+        const sheet = workbook.Sheets[name];
+        const headerRow = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || [];
+        
+        return {
+          name,
+          headers: headerRow.map(header => ({ field: header?.toString() || '' }))
+            .filter(header => header.field.trim() !== '')
+        };
+      }).filter(sheet => sheet.headers.length > 0);
+
+      setTemplateFile({ 
+        id: templateFile.id || '',
+        name: templateFile.name, 
+        data: uint8Array,
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      setSelectedTemplateFile(templateFile);
+      setTemplateData(sheets);
+      toast.success('Template file selected successfully');
+    } catch (error) {
+      console.error('Error selecting template:', error);
+      setError(error.message || 'Error selecting template');
+      toast.error('Error selecting template');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <main className="flex-1 p-8">
       <div className="grid grid-cols-[400px,1fr] gap-8 h-[calc(100vh-200px)]">
@@ -403,39 +501,47 @@ export default function Business() {
               </div>
             ) : templateFile ? (
               <div className="space-y-2">
-                <div 
-                  className={`w-full border rounded-lg px-4 py-2 transition-colors group ${
-                    'bg-blue-100 text-gray-800 border-blue-400'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center" style={{ minWidth: '200px' }}>
-                      <div className="w-5 h-5 mr-3">
-                        <Image 
-                          src="/check.png"
-                          alt="Selected template"
-                          width={20}
-                          height={20}
-                        />
+                {templateFiles.map((templateFile, index) => (
+                  <div 
+                    key={templateFile.id || index} 
+                    className={`w-full border rounded-lg px-4 py-2 transition-colors group cursor-pointer ${
+                      selectedTemplateFile && selectedTemplateFile.id === templateFile.id 
+                        ? 'bg-blue-100 text-gray-800 border-blue-400' 
+                        : 'bg-white hover:bg-gray-50 border-gray-300 hover:border-blue-500'
+                    }`}
+                    onClick={() => handleSelectTemplate(templateFile)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center" style={{ minWidth: '200px' }}>
+                        <div className="w-5 h-5 mr-3">
+                          {selectedTemplateFile && selectedTemplateFile.id === templateFile.id && (
+                            <Image 
+                              src="/check.png"
+                              alt="Selected template"
+                              width={20}
+                              height={20}
+                            />
+                          )}
+                        </div>
+                        <span className={`text-sm text-lg ${selectedTemplateFile && selectedTemplateFile.id === templateFile.id ? 'text-gray-800' : 'text-gray-600'}`}>
+                          {templateFile.name}
+                        </span>
                       </div>
-                      <span className="text-sm text-lg text-gray-800">
-                        {templateFile.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-end" style={{ width: '30px' }}>
-                      <button
-                        className="p-1.5 opacity-0"
-                      >
-                        <Image 
-                          src="/close.png"
-                          alt="Remove template file"
-                          width={20}
-                          height={20}
-                        />
-                      </button>
+                      <div className="flex items-center justify-end" style={{ width: '30px' }}>
+                        <button
+                          className="p-1.5 opacity-0"
+                        >
+                          <Image 
+                            src="/close.png"
+                            alt="Remove template file"
+                            width={20}
+                            height={20}
+                          />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
             ) : (
               <div className="text-center py-4 text-red-500">
