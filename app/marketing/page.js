@@ -542,6 +542,18 @@ export default function Marketing() {
                           {file.name}
                         </span>
                       </div>
+                      <div className="flex items-center justify-end" style={{ width: '30px' }}>
+                        <button
+                          className="p-1.5 opacity-0"
+                        >
+                          <Image 
+                            src="/close.png"
+                            alt="Remove template file"
+                            width={20}
+                            height={20}
+                          />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
