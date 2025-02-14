@@ -17,6 +17,57 @@ export default function Multi() {
   const [mappings, setMappings] = useState({});
   const [generatedTemplate, setGeneratedTemplate] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+
+  const handleFilesUpload = useCallback((files) => {
+    if (files && files.length > 0) {
+      const newFiles = files.map(file => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve({
+              id: Date.now() + Math.random(),
+              name: file.name,
+              type: file.type,
+              data: reader.result,
+              lastModified: file.lastModified
+            });
+          };
+          reader.readAsArrayBuffer(file);
+        });
+      });
+
+      Promise.all(newFiles).then(fileDataArray => {
+        setUploadedFiles(prev => [...prev, ...fileDataArray]);
+        toast.success(`Successfully uploaded ${fileDataArray.length} file(s)`);
+      });
+    }
+  }, []);
+
+  const handleSelectFile = (file) => {
+    if (selectedFile && selectedFile.id === file.id) {
+      setSelectedFile(null);
+      setShowMapping(false);
+      setWorkbookData(null);
+      setMappings({});
+    } else {
+      setSelectedFile(file);
+      setShowMapping(false);
+      setWorkbookData(null);
+      setMappings({});
+    }
+  };
+
+  const handleRemoveFile = (indexToRemove) => {
+    setUploadedFiles(files => files.filter((_, index) => index !== indexToRemove));
+    if (selectedFile && uploadedFiles[indexToRemove]?.id === selectedFile.id) {
+      setSelectedFile(null);
+      setShowMapping(false);
+      setWorkbookData(null);
+      setMappings({});
+    }
+    toast.success('Source file removed');
+  };
 
   // Load template from Supabase on component mount
   useEffect(() => {
@@ -54,33 +105,22 @@ export default function Multi() {
           throw new Error('No valid headers found in template');
         }
 
-        setTemplateFile({ name: 'multi.xlsx', data: uint8Array });
+        setTemplateFile({ 
+          id: 'multi-template',
+          name: 'multi.xlsx', 
+          data: uint8Array,
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
         setTemplateData(sheets);
       } catch (error) {
         console.error('Error loading template:', error);
-        toast.error('Error loading multi-purpose template');
+        toast.error('Error loading multi template');
       } finally {
         setIsLoading(false);
       }
     };
 
     loadTemplate();
-  }, []);
-
-  const handleFilesUpload = useCallback((files) => {
-    if (files && files.length > 0) {
-      const file = files[0];
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        setSelectedFile({ name: file.name, data });
-        setShowMapping(false);
-        setWorkbookData(null);
-        setMappings({});
-        toast.success('Source file uploaded successfully');
-      };
-      reader.readAsArrayBuffer(file);
-    }
   }, []);
 
   const handleProcess = useCallback(async () => {
@@ -267,61 +307,91 @@ export default function Multi() {
     <main className="flex-1 p-8">
       <div className="grid grid-cols-[400px,1fr] gap-8 h-[calc(100vh-200px)]">
         {/* Left Panel - Files */}
-        <div className="bg-white rounded-lg shadow-lg p-6 overflow-auto">
+        <div className="bg-white rounded-lg shadow-lg px-6 py-4 overflow-auto">
           <h2 className="text-2xl font-semibold mb-6 text-gray-800">Files</h2>
           
           {/* Source Files Section */}
           <div>
-            <h3 className="text-lg font-medium mb-4 text-gray-700">Source File</h3>
+            <h3 className="text-lg font-medium mb-4 text-gray-700">Source Files</h3>
             <FileDropzone 
               onDrop={handleFilesUpload}
               accept={{
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
                 'application/vnd.ms-excel': ['.xls']
               }}
+              multiple={true}
             />
             
-            {selectedFile && (
-              <div className="mt-4 border rounded-lg p-4 bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <Image
-                      src="/check.png"
-                      alt="Checked file"
-                      width={18}
-                      height={18}
-                    />
-                    <span className="text-sm text-gray-600">{selectedFile.name}</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSelectedFile(null);
-                      setShowMapping(false);
-                      setWorkbookData(null);
-                      setMappings({});
-                    }}
-                    className="p-2 hover:bg-gray-100 rounded"
-                    title="Remove file"
+            {uploadedFiles.length > 0 && (
+              <div className="space-y-2 mt-4">
+                {uploadedFiles.map((file, index) => (
+                  <div 
+                    key={file.id || index} 
+                    className={`w-full border rounded-lg px-4 py-2 transition-colors group cursor-pointer ${
+                      selectedFile && selectedFile.id === file.id 
+                        ? 'bg-blue-100 text-gray-800 border-blue-400' 
+                        : 'bg-white hover:bg-gray-50 border-gray-300 hover:border-blue-500'
+                    }`}
+                    onClick={() => handleSelectFile(file)}
                   >
-                    <Image 
-                      src="/close.png"
-                      alt="Remove file"
-                      width={20}
-                      height={20}
-                    />
-                  </button>
-                </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center" style={{ minWidth: '200px' }}>
+                        <div className="w-5 h-5 mr-3">
+                          {selectedFile && selectedFile.id === file.id && (
+                            <Image 
+                              src="/check.png"
+                              alt="Selected source"
+                              width={20}
+                              height={20}
+                            />
+                          )}
+                        </div>
+                        <span className={`text-sm text-lg ${selectedFile && selectedFile.id === file.id ? 'text-gray-800' : 'text-gray-600'}`}>
+                          {file.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end" style={{ width: '30px' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveFile(index);
+                          }}
+                          className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Image 
+                            src="/close.png"
+                            alt="Remove file"
+                            width={20}
+                            height={20}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
             {/* Process Button */}
-            {selectedFile && templateFile && !showMapping && (
+            {uploadedFiles.length > 0 && (
               <div className="flex justify-center mt-6">
                 <button 
-                  className="px-6 py-3 rounded-lg bg-[#64afec] hover:bg-[#5193c7] text-white transition-colors"
+                  className={`px-6 py-3 rounded-lg transition-colors ${
+                    !templateFile
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : selectedFile && templateFile
+                        ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
                   onClick={handleProcess}
+                  disabled={!selectedFile || !templateFile}
                 >
-                  Process File
+                  {!templateFile 
+                    ? 'Loading Template...' 
+                    : !selectedFile 
+                      ? 'Select Source File'
+                      : 'Process File'
+                  }
                 </button>
               </div>
             )}
@@ -332,62 +402,45 @@ export default function Multi() {
             <h3 className="text-lg font-medium mb-4 text-gray-700">Template File</h3>
             {isLoading ? (
               <div className="text-center py-4 text-gray-500">
-                Loading multi-purpose template...
+                Loading multi template...
               </div>
             ) : templateFile ? (
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <div className="flex items-center space-x-3">
-                  <Image
-                    src="/check.png"
-                    alt="Template loaded"
-                    width={18}
-                    height={18}
-                  />
-                  <span className="text-sm text-gray-600">{templateFile.name}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-4 text-red-500">
-                Error loading template. Please refresh the page.
-              </div>
-            )}
-
-            {/* Template Actions */}
-            {showMapping && (
-              <div className="mt-4">
-                {!generatedTemplate ? (
-                  <div className="flex justify-center">
-                    <button
-                      onClick={handleGenerateTemplate}
-                      disabled={!selectedFile || Object.keys(mappings).length === 0}
-                      className={`px-6 py-3 rounded-lg transition-colors ${
-                        selectedFile && Object.keys(mappings).length > 0
-                          ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      }`}
-                    >
-                      Generate Template
-                    </button>
-                  </div>
-                ) : (
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-green-700">Click the ICON to download.</span>
+              <div className="space-y-2">
+                <div 
+                  className="w-full border rounded-lg px-4 py-2 transition-colors group bg-blue-100 text-gray-800 border-blue-400"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center" style={{ minWidth: '200px' }}>
+                      <div className="w-5 h-5 mr-3">
+                        <Image 
+                          src="/check.png"
+                          alt="Selected template"
+                          width={20}
+                          height={20}
+                        />
+                      </div>
+                      <span className="text-sm text-lg text-gray-800">
+                        {templateFile.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-end" style={{ width: '30px' }}>
                       <button
-                        onClick={handleDownloadTemplate}
-                        className="px-4 py-2 transition-colors text-sm hover:bg-green-100 rounded-lg"
-                        title="Download template"
+                        className="p-1.5 opacity-0"
                       >
                         <Image 
-                          src="/download.png"
-                          alt="Download template"
+                          src="/close.png"
+                          alt="Remove template file"
                           width={20}
                           height={20}
                         />
                       </button>
                     </div>
                   </div>
-                )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4 text-red-500">
+                Error loading template. Please refresh the page.
               </div>
             )}
           </div>

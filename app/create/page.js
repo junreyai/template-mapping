@@ -10,6 +10,7 @@ import FileDropzone from '../components/FileDropzone';
 
 export default function Create() {
   const [selectedFile, setSelectedFile] = useState(null);
+  const [templateFiles, setTemplateFiles] = useState([]);
   const [templateFile, setTemplateFile] = useState(null);
   const [workbookData, setWorkbookData] = useState(null);
   const [templateData, setTemplateData] = useState([]);
@@ -25,6 +26,7 @@ export default function Create() {
           const reader = new FileReader();
           reader.onload = () => {
             resolve({
+              id: Date.now() + Math.random(),
               name: file.name,
               type: file.type,
               data: reader.result,
@@ -42,41 +44,73 @@ export default function Create() {
     }
   }, []);
 
-  const handleTemplateSelect = useCallback((files) => {
+  const handleTemplateFilesUpload = useCallback((files) => {
     if (files && files.length > 0) {
-      const file = files[0];
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          
-          const sheets = workbook.SheetNames.map(name => {
-            const sheet = workbook.Sheets[name];
-            const headerRow = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || [];
+      const newFiles = files.map(file => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const arrayBuffer = reader.result;
+            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
             
-            return {
-              name,
-              headers: headerRow.map(header => ({ field: header?.toString() || '' }))
-                .filter(header => header.field.trim() !== '')
-            };
-          }).filter(sheet => sheet.headers.length > 0);
+            // Process template sheets
+            const sheets = workbook.SheetNames.map(name => {
+              const sheet = workbook.Sheets[name];
+              const headerRow = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || [];
+              
+              return {
+                name,
+                headers: headerRow.map(header => ({ field: header?.toString() || '' }))
+                  .filter(header => header.field.trim() !== '')
+              };
+            }).filter(sheet => sheet.headers.length > 0);
 
-          if (sheets.length === 0) {
-            toast.error('No valid headers found in template');
-            return;
+            if (sheets.length === 0) {
+              toast.error(`No valid headers found in template: ${file.name}`);
+              resolve(null);
+              return;
+            }
+
+            resolve({
+              id: Date.now() + Math.random(),
+              name: file.name,
+              type: file.type,
+              data: arrayBuffer,
+              sheets,
+              lastModified: file.lastModified
+            });
+          };
+          reader.readAsArrayBuffer(file);
+        });
+      });
+
+      Promise.all(newFiles).then(fileDataArray => {
+        const validFiles = fileDataArray.filter(file => file !== null);
+        if (validFiles.length > 0) {
+          setTemplateFiles(prev => [...prev, ...validFiles]);
+          // Only set the first file as template if no template is currently selected
+          if (!templateFile) {
+            setTemplateFile(validFiles[0]);
+            setTemplateData(validFiles[0].sheets);
           }
-
-          setTemplateFile({ name: file.name, data });
-          setTemplateData(sheets);
-          toast.success('Template loaded successfully');
-        } catch (error) {
-          console.error('Error reading template:', error);
-          toast.error('Error reading template file');
+          toast.success(`Successfully uploaded ${validFiles.length} template file(s)`);
         }
-      };
-      reader.readAsArrayBuffer(file);
+      });
     }
+  }, [templateFile]);
+
+  const handleRemoveTemplate = useCallback((index) => {
+    setTemplateFiles(prev => {
+      const newFiles = [...prev];
+      newFiles.splice(index, 1);
+      return newFiles;
+    });
+    toast.success('Template file removed');
+  }, []);
+
+  const handleSelectTemplate = useCallback((templateFile) => {
+    setTemplateFile(templateFile);
+    setTemplateData(templateFile.sheets);
   }, []);
 
   const handleProcess = useCallback(async () => {
@@ -266,12 +300,19 @@ export default function Create() {
       setShowMapping(false);
       setWorkbookData(null);
     }
+    toast.success('Source file removed');
   };
 
   const handleSelectFile = (file) => {
-    setSelectedFile(file === selectedFile ? null : file);
-    setShowMapping(false);
-    setWorkbookData(null);
+    if (selectedFile && selectedFile.id === file.id) {
+      setSelectedFile(null);
+      setShowMapping(false);
+      setWorkbookData(null);
+    } else {
+      setSelectedFile(file);
+      setShowMapping(false);
+      setWorkbookData(null);
+    }
   };
 
   const handleReset = useCallback(() => {
@@ -279,6 +320,7 @@ export default function Create() {
     setWorkbookData(null);
     setTemplateFile(null);
     setTemplateData(null);
+    setTemplateFiles([]); // Clear template files array
     setGeneratedTemplate(null);
     setShowMapping(false);
     setMappings({});
@@ -287,13 +329,13 @@ export default function Create() {
   }, []);
 
   const { getRootProps: getTemplateRootProps, getInputProps: getTemplateInputProps, isDragActive: isTemplateDragActive } = useDropzone({
-    onDrop: handleTemplateSelect,
+    onDrop: handleTemplateFilesUpload,
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'application/vnd.ms-excel': ['.xls']
     },
-    maxFiles: 1,
-    multiple: false
+    maxFiles: 10,
+    multiple: true
   });
 
   return (
@@ -318,31 +360,55 @@ export default function Create() {
               
               {/* File List */}
               {uploadedFiles.length > 0 && (
-                <div className="border rounded-lg divide-y divide-gray-200">
+                <div className="space-y-2">
                   {uploadedFiles.map((file, index) => (
                     <div 
-                      key={index} 
-                      className={`flex items-center gap-4 p-4 hover:bg-gray-100 cursor-pointer transition-colors group ${
-                        selectedFile === file ? 'bg-blue-100' : ''
+                      key={file.id || index}
+                      className={`w-full border rounded-lg px-4 py-2 transition-colors group cursor-pointer ${
+                        selectedFile && selectedFile.id === file.id 
+                          ? 'bg-blue-100 text-gray-800 border-blue-400' 
+                          : 'bg-white hover:bg-gray-50 border-gray-300 hover:border-blue-500'
                       }`}
                       onClick={() => handleSelectFile(file)}
                     >
-                      <span className="flex-1 truncate text-gray-800">{file.name}</span>
-                      <button 
-                        className="p-2 transition-opacity opacity-0 group-hover:opacity-100"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveFile(index);
-                        }}
-                        title="Remove file"
-                      >
-                        <Image 
-                          src="/close.png"
-                          alt="Remove file"
-                          width={20}
-                          height={20}
-                        />
-                      </button>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center" style={{ minWidth: '200px' }}>
+                          <div className="w-5 h-5 mr-3">
+                            {selectedFile && selectedFile.id === file.id && (
+                              <Image 
+                                src="/check.png"
+                                alt="Selected source"
+                                width={20}
+                                height={20}
+                              />
+                            )}
+                          </div>
+                          <span className={`text-sm text-lg ${selectedFile && selectedFile.id === file.id ? 'text-gray-800' : 'text-gray-600'}`}>
+                            {file.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-end" style={{ width: '30px' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (selectedFile && selectedFile.id === file.id) {
+                                setSelectedFile(null);
+                                setShowMapping(false);
+                                setWorkbookData(null);
+                              }
+                              handleRemoveFile(index);
+                            }}
+                            className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Image 
+                              src="/close.png"
+                              alt="Remove file"
+                              width={20}
+                              height={20}
+                            />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -363,7 +429,7 @@ export default function Create() {
                     disabled={!selectedFile || !templateFile}
                   >
                     {!templateFile 
-                      ? 'Missing Template File' 
+                      ? 'Select Template File First' 
                       : !selectedFile 
                         ? 'Select Source File'
                         : 'Process File'
@@ -376,94 +442,127 @@ export default function Create() {
             {/* Template Section */}
             <div className="mt-6">
               <h3 className="text-lg font-medium mb-4 text-gray-700">Template Files</h3>
-              {templateFile ? (
-                <div className="w-full border rounded-lg p-4 bg-gray-50 group hover:bg-gray-100 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <Image
-                        src="/check.png"
-                        alt="Checked file"
-                        width={18}
-                        height={18}
-                      />
-                      <span className="text-sm text-gray-600">{templateFile.name}</span>
-                    </div>
-                    <button
+              <div
+                {...getTemplateRootProps()}
+                className={`w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-300 group mb-4
+                  ${isTemplateDragActive ? 'border-[#64afec] bg-blue-100' : 'border-gray-300 hover:border-blue-500 hover:bg-gray-50'}`}
+              >
+                <input {...getTemplateInputProps()} />
+                <div className="space-y-2">
+                  <div className="mx-auto text-center text-gray-400 text-2xl mb-2">📄</div>
+                  <p className="text-sm text-gray-500">
+                    {isTemplateDragActive ? "Drop the template here..." : "Drag and drop template file, or click to select"}
+                  </p>
+                </div>
+              </div>
+              {templateFiles.length > 0 && (
+                <div className="space-y-2 mt-4">
+                  {templateFiles.map((file, index) => (
+                    <div 
+                      key={file.id || index}
+                      className={`w-full border rounded-lg px-4 py-2 transition-colors group cursor-pointer ${
+                        templateFile && templateFile.id === file.id 
+                          ? 'bg-blue-100 text-gray-800 border-blue-400'
+                          : 'bg-white hover:bg-gray-50 border-gray-300 hover:border-blue-500'
+                      }`}
                       onClick={() => {
-                        setTemplateFile(null);
-                        setTemplateData(null);
-                        setGeneratedTemplate(null);
-                        setShowMapping(false);
-                        setMappings({});
-                        toast.success('Template file removed');
+                        if (templateFile && templateFile.id === file.id) {
+                          setTemplateFile(null);
+                          setTemplateData(null);
+                          setGeneratedTemplate(null);
+                          setShowMapping(false);
+                          setMappings({});
+                        } else {
+                          setTemplateFile(file);
+                          setTemplateData(file.sheets);
+                        }
                       }}
-                      className="p-2 transition-opacity opacity-0 group-hover:opacity-100"
-                      title="Remove template"
                     >
-                      <Image 
-                        src="/close.png"
-                        alt="Remove template file"
-                        width={20}
-                        height={20}
-                      />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  {...getTemplateRootProps()}
-                  className={`w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-300 group
-                    ${isTemplateDragActive ? 'border-[#64afec] bg-blue-100' : 'border-gray-300 hover:border-blue-500 hover:bg-gray-50'}`}
-                >
-                  <input {...getTemplateInputProps()} />
-                  <div className="space-y-2">
-                    <div className="mx-auto text-center text-gray-400 text-2xl mb-2">📄</div>
-                    <p className="text-sm text-gray-500">
-                      {isTemplateDragActive ? "Drop the template here..." : "Drag and drop template file, or click to select"}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Template Actions */}
-              {showMapping && (
-                <div className="mt-4">
-                  {!generatedTemplate ? (
-                    <div className="flex justify-center">
-                      <button
-                        onClick={handleGenerateTemplate}
-                        disabled={!selectedFile || Object.keys(mappings).length === 0}
-                        className={`px-6 py-3 rounded-lg transition-colors ${
-                          selectedFile && Object.keys(mappings).length > 0
-                            ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                      >
-                        Generate Template
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-4 bg-green-50 rounded-lg">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-green-700">Click the ICON to download.</span>
-                        <button
-                          onClick={handleDownloadTemplate}
-                          className="px-4 py-2 transition-colors text-sm hover:bg-green-100 rounded-lg"
-                          title="Download template"
-                        >
-                          <Image 
-                            src="/download.png"
-                            alt="Download template"
-                            width={20}
-                            height={20}
-                          />
-                        </button>
+                        <div className="flex items-center" style={{ minWidth: '200px' }}>
+                          <div className="w-5 h-5 mr-3">
+                            {templateFile && templateFile.id === file.id && (
+                              <Image 
+                                src="/check.png"
+                                alt="Selected template"
+                                width={20}
+                                height={20}
+                              />
+                            )}
+                          </div>
+                          <span className={`text-sm text-lg ${templateFile && templateFile.id === file.id ? 'text-gray-800' : 'text-gray-600'}`}>
+                            {file.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-end" style={{ width: '30px' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (templateFile && templateFile.id === file.id) {
+                                setTemplateFile(null);
+                                setTemplateData(null);
+                                setGeneratedTemplate(null);
+                                setShowMapping(false);
+                                setMappings({});
+                              }
+                              const newFiles = templateFiles.filter((_, i) => i !== index);
+                              setTemplateFiles(newFiles);
+                              toast.success('Template file removed');
+                            }}
+                            className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Image 
+                              src="/close.png"
+                              alt="Remove template file"
+                              width={20}
+                              height={20}
+                            />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
+            {/* Template Actions */}
+            {showMapping && (
+              <div className="mt-4">
+                {!generatedTemplate ? (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleGenerateTemplate}
+                      disabled={!selectedFile || Object.keys(mappings).length === 0}
+                      className={`px-6 py-3 rounded-lg transition-colors ${
+                        selectedFile && Object.keys(mappings).length > 0
+                          ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Generate Template
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-green-700">Click the ICON to download.</span>
+                      <button
+                        onClick={handleDownloadTemplate}
+                        className="px-4 py-2 transition-colors text-sm hover:bg-green-100 rounded-lg"
+                        title="Download template"
+                      >
+                        <Image 
+                          src="/download.png"
+                          alt="Download template"
+                          width={20}
+                          height={20}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right Panel - Mapping */}
