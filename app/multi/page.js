@@ -58,9 +58,9 @@ export default function Multi() {
     }
   };
 
-  const handleRemoveFile = (file) => {
-    setUploadedFiles(files => files.filter(f => f.id !== file.id));
-    if (selectedFile && uploadedFiles.find(f => f.id === file.id)?.id === selectedFile.id) {
+  const handleRemoveFile = (indexToRemove) => {
+    setUploadedFiles(files => files.filter((_, index) => index !== indexToRemove));
+    if (selectedFile && uploadedFiles[indexToRemove]?.id === selectedFile.id) {
       setSelectedFile(null);
       setShowMapping(false);
       setWorkbookData(null);
@@ -336,16 +336,16 @@ export default function Multi() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center" style={{ minWidth: '200px' }}>
-                        <div className="w-5 h-5 mr-3">
-                          {selectedFile && selectedFile.id === file.id && (
+                        {selectedFile && selectedFile.id === file.id && (
+                          <div className="w-5 h-5 mr-3">
                             <Image 
                               src="/check.png"
                               alt="Selected source"
                               width={20}
                               height={20}
                             />
-                          )}
-                        </div>
+                          </div>
+                        )}
                         <span className={`text-sm text-lg ${selectedFile && selectedFile.id === file.id ? 'text-gray-800' : 'text-gray-600'}`}>
                           {file.name}
                         </span>
@@ -502,14 +502,15 @@ export default function Multi() {
                 <MappingInterface 
                   workbookData={workbookData}
                   templateData={templateData}
-                  mappings={mappings}
                   onGenerateTemplate={handleMappingChange}
                 />
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-center h-[200px] text-lg text-gray-500">
-              {selectedFile ? 'Processing...' : 'Select a source file to start mapping'}
+              {selectedFile 
+                ? "Click Process to start mapping" 
+                : "Select a source file to process"}
             </div>
           )}
         </div>

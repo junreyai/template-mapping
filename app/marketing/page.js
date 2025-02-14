@@ -58,9 +58,9 @@ export default function Marketing() {
     }
   };
 
-  const handleRemoveFile = (file) => {
-    setUploadedFiles(files => files.filter(f => f.id !== file.id));
-    if (selectedFile && uploadedFiles.find(f => f.id === file.id)?.id === selectedFile.id) {
+  const handleRemoveFile = (indexToRemove) => {
+    setUploadedFiles(files => files.filter((_, index) => index !== indexToRemove));
+    if (selectedFile && uploadedFiles[indexToRemove]?.id === selectedFile.id) {
       setSelectedFile(null);
       setShowMapping(false);
       setWorkbookData(null);
@@ -354,7 +354,7 @@ export default function Marketing() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleRemoveFile(file);
+                            handleRemoveFile(index);
                           }}
                           className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
@@ -502,14 +502,15 @@ export default function Marketing() {
                 <MappingInterface 
                   workbookData={workbookData}
                   templateData={templateData}
-                  mappings={mappings}
                   onGenerateTemplate={handleMappingChange}
                 />
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-center h-[200px] text-lg text-gray-500">
-              {selectedFile ? 'Processing...' : 'Select a source file to start mapping'}
+              {selectedFile 
+                ? "Click Process to start mapping" 
+                : "Select a source file to process"}
             </div>
           )}
         </div>
