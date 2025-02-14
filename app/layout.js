@@ -16,8 +16,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={publicSans.variable}>
-      <body className="min-h-screen flex flex-col bg-gray-100">
+    <html lang="en" className={`${publicSans.variable} overflow-x-hidden`}>
+      <body className="min-h-screen flex flex-col bg-gray-100 overflow-x-hidden scrollbar-hide">
         <Toaster position="top-right" />
         <Header/>
         {children}

@@ -39,8 +39,8 @@ const Home = () => {
   ];
 
   return (
-    <div className="min-h-[calc(100vh-56px)] bg-gradient-to-b from-white to-blue-50">
-      <div className="max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="min-h-[calc(100vh-56px)] bg-gradient-to-b from-white to-blue-50 scrollbar-hide">
+      <div className="max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 py-6 scrollbar-hide">
         {/* Hero Section */}
         <section className="text-center mb-10 animate-fadeIn">
           <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600 mb-4">
@@ -58,8 +58,8 @@ const Home = () => {
 
         {/* Categories Section */}
         <div className="flex justify-center mb-10">
-          <div className="w-full overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="w-full overflow-hidden scrollbar-hide">
+            <div className="overflow-x-auto scrollbar-hide">
               <div className="flex justify-center min-w-max">
                 <section className="flex gap-8">
                   {categories.map((category, index) => (
