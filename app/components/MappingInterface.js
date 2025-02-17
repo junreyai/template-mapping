@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function MappingInterface({ workbookData = [], templateData = [], onGenerateTemplate }) {
   const [activeSheet, setActiveSheet] = useState(0);
@@ -23,6 +23,18 @@ export default function MappingInterface({ workbookData = [], templateData = [],
       }
     }
     return null;
+  };
+
+  const findMatchingSourceField = (templateField) => {
+    for (const sheet of workbookData) {
+      const matchingHeader = sheet.headers.find(header => 
+        header.field.toLowerCase().trim() === templateField.toLowerCase().trim()
+      );
+      if (matchingHeader) {
+        return `${sheet.name}|${matchingHeader.field}`;
+      }
+    }
+    return '';
   };
 
   // Reset activeSheet when workbookData changes
@@ -70,13 +82,36 @@ export default function MappingInterface({ workbookData = [], templateData = [],
     }
   }, [workbookData, activeSheet, findSimilarField, templateData, mappings, onGenerateTemplate]);
 
-  const handleMapping = (templateField, value) => {
-    if (!workbookData || !workbookData[activeSheet]) return;
+  useEffect(() => {
+    if (templateData && workbookData && workbookData.length > 0) {
+      const newMappings = { ...mappings };
+      let hasNewMappings = false;
 
-    const currentSheet = workbookData[activeSheet];
-    const templateKey = `${currentSheet.name}|${templateField}`;
+      templateData.forEach(templateSheet => {
+        templateSheet.headers.forEach(header => {
+          const templateKey = `${templateSheet.name}|${header.field}`;
+          // Only auto-map if no mapping exists
+          if (!mappings[templateKey]) {
+            const matchingSource = findMatchingSourceField(header.field);
+            if (matchingSource) {
+              newMappings[templateKey] = matchingSource;
+              hasNewMappings = true;
+            }
+          }
+        });
+      });
 
+      if (hasNewMappings) {
+        setMappings(newMappings);
+        onGenerateTemplate(newMappings);
+      }
+    }
+  }, [templateData, workbookData]);
+
+  const handleMapping = (templateSheet, templateField, value) => {
+    const templateKey = `${templateSheet}|${templateField}`;
     const newMappings = { ...mappings };
+
     if (!value) {
       delete newMappings[templateKey];
     } else {
@@ -102,16 +137,13 @@ export default function MappingInterface({ workbookData = [], templateData = [],
     return Object.keys(mappings).some(key => key.startsWith(`${sheetName}|`));
   };
 
-  if (!workbookData || workbookData.length === 0) {
+  if (!workbookData || workbookData.length === 0 || !templateData || templateData.length === 0) {
     return null;
   }
 
-  const currentSheet = workbookData[activeSheet];
-  if (!currentSheet) return null;
-
   return (
     <div className="flex flex-col h-full">
-      {/* Sheet Tabs */}
+      {/* Source Sheet Tabs */}
       <div className="flex space-x-2 mb-4 overflow-x-auto">
         {workbookData.map((sheet, index) => (
           <button
@@ -135,52 +167,69 @@ export default function MappingInterface({ workbookData = [], templateData = [],
         <table className="w-full border-collapse">
           <thead className="bg-gray-50 sticky top-0">
             <tr>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">Template Fields</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">Source Fields</th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 w-1/2">Template Fields</th>
+              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 w-1/2">Source Fields</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {currentSheet.headers.map((header, index) => {
-              const templateField = header.field;
-              const templateKey = `${currentSheet.name}|${templateField}`;
-              const selectedValue = mappings[templateKey];
-              const selectedFields = getSelectedSourceFields();
-
-              return (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 text-sm text-gray-900">{templateField}</td>
-                  <td className="px-4 py-2">
-                    <select
-                      value={selectedValue || ''}
-                      onChange={(e) => handleMapping(templateField, e.target.value)}
-                      onFocus={() => setActiveSelect(templateKey)}
-                      onBlur={() => setActiveSelect(null)}
-                      className={`w-full p-2 text-sm border rounded-lg ${
-                        activeSelect === templateKey ? 'border-[#64afec]' : 'border-gray-300'
-                      }`}
-                    >
-                      <option value="">Select a field</option>
-                      {workbookData.map(sheet => (
-                        <optgroup key={sheet.name} label={sheet.name}>
-                          {sheet.headers.map((sourceHeader, idx) => {
-                            const value = `${sheet.name}|${sourceHeader.field}`;
-                            return (
-                              <option
-                                key={idx}
-                                value={value}
-                                disabled={selectedFields.has(value) && value !== selectedValue}
-                              >
-                                {sourceHeader.field}
-                              </option>
-                            );
-                          })}
-                        </optgroup>
-                      ))}
-                    </select>
+            {templateData.map((templateSheet, sheetIndex) => (
+              <React.Fragment key={templateSheet.name}>
+                {/* Template Sheet Header */}
+                <tr className="bg-gray-50">
+                  <td colSpan="2" className="px-4 py-2 text-sm font-medium text-gray-700">
+                    Sheet: {templateSheet.name}
                   </td>
                 </tr>
-              );
-            })}
+                {/* Template Fields */}
+                {templateSheet.headers.map((header, fieldIndex) => {
+                  const templateField = header.field;
+                  const templateKey = `${templateSheet.name}|${templateField}`;
+                  const selectedValue = mappings[templateKey];
+                  const selectedFields = getSelectedSourceFields();
+
+                  return (
+                    <tr key={`${templateSheet.name}-${fieldIndex}`} className="hover:bg-gray-50">
+                      <td className="px-4 py-2 text-sm text-gray-900 w-1/2">
+                        <div className="flex items-center">
+                          <span className="truncate">{templateField}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 w-1/2">
+                        <div className="flex items-center">
+                          <select
+                            value={selectedValue || ''}
+                            onChange={(e) => handleMapping(templateSheet.name, templateField, e.target.value)}
+                            onFocus={() => setActiveSelect(templateKey)}
+                            onBlur={() => setActiveSelect(null)}
+                            className={`w-full p-2 text-sm border rounded-lg ${
+                              activeSelect === templateKey ? 'border-[#64afec]' : 'border-gray-300'
+                            }`}
+                          >
+                            <option value="">Select a field</option>
+                            {workbookData.map(sheet => (
+                              <optgroup key={sheet.name} label={sheet.name}>
+                                {sheet.headers.map((sourceHeader, idx) => {
+                                  const value = `${sheet.name}|${sourceHeader.field}`;
+                                  return (
+                                    <option
+                                      key={idx}
+                                      value={value}
+                                      disabled={selectedFields.has(value) && value !== selectedValue}
+                                    >
+                                      {sourceHeader.field}
+                                    </option>
+                                  );
+                                })}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            ))}
           </tbody>
         </table>
       </div>
