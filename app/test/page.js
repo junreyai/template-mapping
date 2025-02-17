@@ -9,7 +9,7 @@ import MappingInterface from '../components/MappingInterface';
 import FileDropzone from '../components/FileDropzone';
 
 export default function Test() {
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [templateFiles, setTemplateFiles] = useState([]);
   const [templateFile, setTemplateFile] = useState(null);
   const [workbookData, setWorkbookData] = useState(null);
@@ -18,6 +18,7 @@ export default function Test() {
   const [mappings, setMappings] = useState({});
   const [generatedTemplate, setGeneratedTemplate] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [activeFile, setActiveFile] = useState(null);
 
   const handleFilesUpload = useCallback((files) => {
     if (files && files.length > 0) {
@@ -114,51 +115,62 @@ export default function Test() {
   }, []);
 
   const handleProcess = useCallback(async () => {
-    if (!selectedFile || !templateFile) return;
+    if (selectedFiles.length === 0 || !templateFile) return;
 
     try {
-      // Read the source file data
-      const sourceWorkbook = XLSX.read(selectedFile.data, { type: 'array' });
-      
-      // Process all sheets
-      const processedSheets = sourceWorkbook.SheetNames.map(sheetName => {
-        const sourceSheet = sourceWorkbook.Sheets[sheetName];
-        const sourceData = XLSX.utils.sheet_to_json(sourceSheet, { header: 1 });
+      // Process all selected files
+      const processedFiles = await Promise.all(selectedFiles.map(async (file) => {
+        const sourceWorkbook = XLSX.read(file.data, { type: 'array' });
         
-        if (sourceData.length === 0) {
-          return null;
-        }
+        // Process all sheets in the file
+        const processedSheets = sourceWorkbook.SheetNames.map(sheetName => {
+          const sourceSheet = sourceWorkbook.Sheets[sheetName];
+          const sourceData = XLSX.utils.sheet_to_json(sourceSheet, { header: 1 });
+          
+          if (sourceData.length === 0) {
+            return null;
+          }
 
-        // Get headers from first row
-        const headers = sourceData[0].map(header => header?.toString() || '').filter(Boolean);
+          // Get headers from first row
+          const headers = sourceData[0].map(header => header?.toString() || '').filter(Boolean);
+          
+          return {
+            name: sheetName,
+            headers: headers.map(header => ({ field: header })),
+            data: sourceData.slice(1),
+            fileName: file.name, // Add filename to identify source
+            fileId: file.id // Add fileId to identify source
+          };
+        }).filter(sheet => sheet !== null && sheet.headers.length > 0);
         
-        return {
-          name: sheetName,
-          headers: headers.map(header => ({ field: header })),
-          data: sourceData.slice(1)
-        };
-      }).filter(sheet => sheet !== null && sheet.headers.length > 0);
+        return processedSheets;
+      }));
+
+      // Flatten all sheets from all files
+      const allSheets = processedFiles.flat();
       
-      if (processedSheets.length === 0) {
-        toast.error('No valid data found in source file');
+      if (allSheets.length === 0) {
+        toast.error('No valid data found in source files');
         return;
       }
 
-      setWorkbookData(processedSheets);
+      setWorkbookData(allSheets);
       setShowMapping(true);
-      toast.success('File processed successfully');
+      // Set the first file as active
+      setActiveFile(selectedFiles[0]);
+      toast.success('Files processed successfully');
     } catch (error) {
-      console.error('Error processing file:', error);
-      toast.error('Error processing file');
+      console.error('Error processing files:', error);
+      toast.error('Error processing files');
     }
-  }, [selectedFile, templateFile]);
+  }, [selectedFiles, templateFile]);
 
   const handleMappingChange = useCallback((newMappings) => {
     setMappings(newMappings);
   }, []);
 
   const handleGenerateTemplate = useCallback(async () => {
-    if (!selectedFile || !templateFile || !workbookData) {
+    if (!selectedFiles.length || !templateFile || !workbookData) {
       toast.error('Please upload both source and template files');
       return;
     }
@@ -258,7 +270,7 @@ export default function Test() {
       console.error('Generation error:', error);
       toast.error('Error generating template. Please try again.');
     }
-  }, [selectedFile, templateFile, workbookData, mappings, templateData]);
+  }, [selectedFiles, templateFile, workbookData, mappings, templateData]);
 
   const handleDownloadTemplate = useCallback(() => {
     if (!generatedTemplate) return;
@@ -269,8 +281,8 @@ export default function Test() {
       link.href = url;
       
       // Generate filename
-      const baseFileName = selectedFile 
-        ? selectedFile.name.split('.').slice(0, -1).join('.')
+      const baseFileName = selectedFiles.length > 0 
+        ? selectedFiles[0].name.split('.').slice(0, -1).join('.')
         : 'template';
       const fileName = `${baseFileName}_mapped.xlsx`;
       
@@ -291,12 +303,15 @@ export default function Test() {
       console.error('Download error:', error);
       toast.error('Error downloading template. Please try again.');
     }
-  }, [generatedTemplate, selectedFile]);
+  }, [generatedTemplate, selectedFiles]);
 
   const handleRemoveFile = (indexToRemove) => {
     setUploadedFiles(files => files.filter((_, index) => index !== indexToRemove));
-    if (selectedFile && uploadedFiles[indexToRemove]?.name === selectedFile.name) {
-      setSelectedFile(null);
+    setSelectedFiles(prevFiles => {
+      const removedFile = uploadedFiles[indexToRemove];
+      return prevFiles.filter(file => file.id !== removedFile?.id);
+    });
+    if (selectedFiles.length <= 1) {
       setShowMapping(false);
       setWorkbookData(null);
     }
@@ -304,19 +319,25 @@ export default function Test() {
   };
 
   const handleSelectFile = (file) => {
-    if (selectedFile && selectedFile.id === file.id) {
-      setSelectedFile(null);
-      setShowMapping(false);
-      setWorkbookData(null);
-    } else {
-      setSelectedFile(file);
-      setShowMapping(false);
-      setWorkbookData(null);
-    }
+    setSelectedFiles(prevFiles => {
+      const isSelected = prevFiles.some(f => f.id === file.id);
+      if (isSelected) {
+        // If file is already selected, remove it
+        const newFiles = prevFiles.filter(f => f.id !== file.id);
+        if (newFiles.length === 0) {
+          setShowMapping(false);
+          setWorkbookData(null);
+        }
+        return newFiles;
+      } else {
+        // Add the file to selected files
+        return [...prevFiles, file];
+      }
+    });
   };
 
   const handleReset = useCallback(() => {
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setWorkbookData(null);
     setTemplateFile(null);
     setTemplateData(null);
@@ -325,6 +346,7 @@ export default function Test() {
     setShowMapping(false);
     setMappings({});
     setUploadedFiles([]);
+    setActiveFile(null);
     toast.success('All data has been reset successfully');
   }, []);
 
@@ -365,7 +387,7 @@ export default function Test() {
                     <div 
                       key={file.id || index}
                       className={`w-full border rounded-lg px-4 py-2 transition-colors group cursor-pointer ${
-                        selectedFile && selectedFile.id === file.id 
+                        selectedFiles.some(f => f.id === file.id)
                           ? 'bg-blue-100 text-gray-800 border-blue-400' 
                           : 'bg-white hover:bg-gray-50 border-gray-300 hover:border-blue-500'
                       }`}
@@ -374,7 +396,7 @@ export default function Test() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center" style={{ minWidth: '200px' }}>
                           <div className="w-5 h-5 mr-3">
-                            {selectedFile && selectedFile.id === file.id && (
+                            {selectedFiles.some(f => f.id === file.id) && (
                               <Image 
                                 src="/check.png"
                                 alt="Selected source"
@@ -383,7 +405,7 @@ export default function Test() {
                               />
                             )}
                           </div>
-                          <span className={`text-sm text-lg ${selectedFile && selectedFile.id === file.id ? 'text-gray-800' : 'text-gray-600'}`}>
+                          <span className={`text-sm text-lg ${selectedFiles.some(f => f.id === file.id) ? 'text-gray-800' : 'text-gray-600'}`}>
                             {file.name}
                           </span>
                         </div>
@@ -391,11 +413,6 @@ export default function Test() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (selectedFile && selectedFile.id === file.id) {
-                                setSelectedFile(null);
-                                setShowMapping(false);
-                                setWorkbookData(null);
-                              }
                               handleRemoveFile(index);
                             }}
                             className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -421,18 +438,18 @@ export default function Test() {
                     className={`px-6 py-3 rounded-lg transition-colors ${
                       !templateFile
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : selectedFile && templateFile
+                        : selectedFiles.length > 0 && templateFile
                           ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
                           : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     }`}
                     onClick={handleProcess}
-                    disabled={!selectedFile || !templateFile}
+                    disabled={selectedFiles.length === 0 || !templateFile}
                   >
                     {!templateFile 
                       ? 'Select Template File First' 
-                      : !selectedFile 
-                        ? 'Select Source File'
-                        : 'Process File'
+                      : selectedFiles.length === 0
+                        ? 'Select Source Files'
+                        : `Process ${selectedFiles.length} File${selectedFiles.length > 1 ? 's' : ''}`
                     }
                   </button>
                 </div>
@@ -532,9 +549,9 @@ export default function Test() {
                   <div className="flex justify-center">
                     <button
                       onClick={handleGenerateTemplate}
-                      disabled={!selectedFile || Object.keys(mappings).length === 0}
+                      disabled={!selectedFiles.length || Object.keys(mappings).length === 0}
                       className={`px-6 py-3 rounded-lg transition-colors ${
-                        selectedFile && Object.keys(mappings).length > 0
+                        selectedFiles.length && Object.keys(mappings).length > 0
                           ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
                           : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       }`}
@@ -588,11 +605,28 @@ export default function Test() {
             {showMapping && workbookData ? (
               <div className="flex flex-col flex-grow min-h-0">
                 <div className="mb-4 p-4 bg-blue-100 text-[#64afec] rounded-md flex-shrink-0">
-                  {selectedFile?.name}
+                  <div className="flex flex-wrap gap-2">
+                    {selectedFiles.map((file, index) => (
+                      <div
+                        key={file.id}
+                        className={`flex items-center px-3 py-1 rounded-md cursor-pointer transition-colors ${
+                          activeFile?.id === file.id 
+                            ? 'bg-[#64afec] text-white' 
+                            : 'bg-white hover:bg-blue-50 text-[#64afec]'
+                        }`}
+                        onClick={() => {
+                          setActiveFile(file);
+                          toast.success(`Showing sheets from: ${file.name}`);
+                        }}
+                      >
+                        <span>{file.name}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex-grow overflow-hidden">
                   <MappingInterface 
-                    workbookData={workbookData}
+                    workbookData={workbookData.filter(sheet => sheet.fileId === activeFile?.id)}
                     templateData={templateData}
                     onGenerateTemplate={handleMappingChange}
                   />
@@ -600,9 +634,9 @@ export default function Test() {
               </div>
             ) : (
               <div className="flex items-center justify-center h-[200px] text-lg text-gray-500">
-                {selectedFile 
+                {selectedFiles.length > 0 
                   ? "Click Process to start mapping" 
-                  : "Select a file to process"}
+                  : "Select files to process"}
               </div>
             )}
           </div>

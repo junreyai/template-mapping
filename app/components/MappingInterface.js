@@ -27,27 +27,36 @@ export default function MappingInterface({ workbookData = [], templateData = [],
 
   // Auto-map fields when workbookData changes
   useEffect(() => {
-    if (!templateData || !templateData[activeSheet] || !workbookData) return;
+    if (!templateData || !templateData[activeSheet] || !workbookData || workbookData.length === 0) return;
 
-    const newMappings = { ...mappings };
+    // Check if we already have mappings for this sheet
     const templateSheetName = templateData[activeSheet].name;
-
-    templateData[activeSheet].headers.forEach(header => {
-      const templateField = header.field;
-      const templateKey = `${templateSheetName}|${templateField}`;
-      
-      // Only map if not already mapped
-      if (!newMappings[templateKey]) {
-        const similarField = findSimilarField(templateField);
-        if (similarField) {
-          newMappings[templateKey] = similarField;
-        }
-      }
+    const hasExistingMappings = templateData[activeSheet].headers.some(header => {
+      const templateKey = `${templateSheetName}|${header.field}`;
+      return mappings[templateKey];
     });
 
-    setMappings(newMappings);
-    onGenerateTemplate(newMappings);
-  }, [workbookData, templateData, activeSheet]);
+    // Only perform auto-mapping if there are no existing mappings
+    if (!hasExistingMappings) {
+      const newMappings = { ...mappings };
+      
+      templateData[activeSheet].headers.forEach(header => {
+        const templateField = header.field;
+        const templateKey = `${templateSheetName}|${templateField}`;
+        
+        // Only map if not already mapped
+        if (!newMappings[templateKey]) {
+          const similarField = findSimilarField(templateField);
+          if (similarField) {
+            newMappings[templateKey] = similarField;
+          }
+        }
+      });
+
+      setMappings(newMappings);
+      onGenerateTemplate(newMappings);
+    }
+  }, [workbookData, templateData, activeSheet, findSimilarField]);
 
   const handleMapping = (templateField, value) => {
     if (!templateData || !templateData[activeSheet]) return;
