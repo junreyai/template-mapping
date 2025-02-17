@@ -163,52 +163,63 @@ export default function Business() {
   };
 
   const handleProcess = useCallback(async () => {
-    if (!selectedFile || !templateFile) return;
+    if (!uploadedFiles.length || !templateFile) {
+      toast.error('Please upload source files');
+      return;
+    }
 
     try {
-      // Read the source file data
-      const sourceWorkbook = XLSX.read(selectedFile.data, { type: 'array' });
+      // Process all uploaded files
+      const allProcessedSheets = [];
       
-      // Process all sheets
-      const processedSheets = sourceWorkbook.SheetNames.map(sheetName => {
-        const sourceSheet = sourceWorkbook.Sheets[sheetName];
-        const sourceData = XLSX.utils.sheet_to_json(sourceSheet, { header: 1 });
+      for (const file of uploadedFiles) {
+        // Read each source file
+        const sourceWorkbook = XLSX.read(file.data, { type: 'array' });
         
-        if (sourceData.length === 0) {
-          return null;
-        }
+        // Process all sheets in the file
+        const processedSheets = sourceWorkbook.SheetNames.map(sheetName => {
+          const sourceSheet = sourceWorkbook.Sheets[sheetName];
+          const sourceData = XLSX.utils.sheet_to_json(sourceSheet, { header: 1 });
+          
+          if (sourceData.length === 0) {
+            return null;
+          }
 
-        // Get headers from first row
-        const headers = sourceData[0].map(header => header?.toString() || '').filter(Boolean);
+          // Get headers from first row
+          const headers = sourceData[0].map(header => header?.toString() || '').filter(Boolean);
+          
+          return {
+            name: sheetName,
+            headers: headers.map(header => ({ field: header })),
+            data: sourceData.slice(1),
+            sourceFile: file.name // Add source file name for reference
+          };
+        }).filter(sheet => sheet !== null && sheet.headers.length > 0);
         
-        return {
-          name: sheetName,
-          headers: headers.map(header => ({ field: header })),
-          data: sourceData.slice(1)
-        };
-      }).filter(sheet => sheet !== null && sheet.headers.length > 0);
+        allProcessedSheets.push(...processedSheets);
+      }
       
-      if (processedSheets.length === 0) {
-        toast.error('No valid data found in source file');
+      if (allProcessedSheets.length === 0) {
+        toast.error('No valid data found in source files');
         return;
       }
 
-      setWorkbookData(processedSheets);
+      setWorkbookData(allProcessedSheets);
       setShowMapping(true);
-      toast.success('File processed successfully');
+      toast.success('Files processed successfully');
     } catch (error) {
-      console.error('Error processing file:', error);
-      toast.error('Error processing file');
+      console.error('Error processing files:', error);
+      toast.error('Error processing files');
     }
-  }, [selectedFile, templateFile]);
+  }, [uploadedFiles, templateFile]);
 
   const handleMappingChange = useCallback((newMappings) => {
     setMappings(newMappings);
   }, []);
 
   const handleGenerateTemplate = useCallback(async () => {
-    if (!selectedFile || !templateFile || !workbookData) {
-      toast.error('Please upload source file');
+    if (!workbookData || !templateFile) {
+      toast.error('Please process source files');
       return;
     }
 
@@ -231,12 +242,10 @@ export default function Business() {
         // Check if this sheet has any mappings
         const hasMappings = templateHeaders.some(field => mappings[field]);
         if (!hasMappings) {
-          // Only show error for the first sheet
           if (sheetIndex === 0) {
             toast.error('Please map at least one field before generating template');
             return;
           }
-          // Skip other sheets silently
           return;
         }
 
@@ -244,16 +253,15 @@ export default function Business() {
         XLSX.utils.sheet_add_aoa(newSheet, [headerRow], { origin: 0 });
 
         // Find corresponding source sheet and its data
-        const sourceSheetMappings = new Map(); // Map to store source sheet data
+        const sourceSheetMappings = new Map();
         templateHeaders.forEach(templateField => {
           const mapping = mappings[templateField];
           if (mapping) {
             const [sheetName, field] = mapping.split('|');
-            if (!sourceSheetMappings.has(sheetName)) {
-              const sourceSheet = workbookData.find(sheet => sheet.name === sheetName);
-              if (sourceSheet) {
-                sourceSheetMappings.set(sheetName, sourceSheet);
-              }
+            // Find the sheet in any of the processed files
+            const sourceSheet = workbookData.find(sheet => sheet.name === sheetName);
+            if (sourceSheet) {
+              sourceSheetMappings.set(sheetName, sourceSheet);
             }
           }
         });
@@ -261,7 +269,6 @@ export default function Business() {
         // Get primary source sheet (first one with mappings)
         const primarySourceSheet = sourceSheetMappings.values().next().value;
         if (!primarySourceSheet) {
-          // Skip this sheet silently
           return;
         }
 
@@ -269,7 +276,7 @@ export default function Business() {
         const mappedData = primarySourceSheet.data.map(row => {
           return templateHeaders.map(templateField => {
             const sourceField = mappings[templateField];
-            if (!sourceField) return ''; // Return empty string for unmapped fields
+            if (!sourceField) return '';
 
             const [sourceSheetName, sourceHeader] = sourceField.split('|');
             const sourceSheet = sourceSheetMappings.get(sourceSheetName);
@@ -292,7 +299,7 @@ export default function Business() {
       });
 
       if (!hasGeneratedAnySheet) {
-        return; // Exit silently if no sheets were generated (error already shown if needed)
+        return;
       }
 
       // Generate Excel file
@@ -307,7 +314,7 @@ export default function Business() {
       console.error('Generation error:', error);
       toast.error('Error generating template. Please try again.');
     }
-  }, [selectedFile, templateFile, workbookData, mappings, templateData]);
+  }, [workbookData, templateFile, mappings, templateData]);
 
   const handleDownloadTemplate = useCallback(() => {
     if (!generatedTemplate) return;
@@ -318,8 +325,8 @@ export default function Business() {
       link.href = url;
       
       // Generate filename
-      const baseFileName = selectedFile 
-        ? selectedFile.name.split('.').slice(0, -1).join('.')
+      const baseFileName = uploadedFiles.length > 0 
+        ? uploadedFiles[0].name.split('.').slice(0, -1).join('.')
         : 'template';
       const fileName = `${baseFileName}_mapped.xlsx`;
       
@@ -340,7 +347,7 @@ export default function Business() {
       console.error('Download error:', error);
       toast.error('Error downloading template. Please try again.');
     }
-  }, [generatedTemplate, selectedFile]);
+  }, [generatedTemplate, uploadedFiles]);
 
   const handleSelectTemplate = async (templateFile) => {
     const bucketName = 'freetemplate';
@@ -474,18 +481,18 @@ export default function Business() {
                   className={`px-6 py-3 rounded-lg transition-colors ${
                     !templateFile
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : selectedFile && templateFile
+                      : uploadedFiles.length > 0 && templateFile
                         ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   }`}
                   onClick={handleProcess}
-                  disabled={!selectedFile || !templateFile}
+                  disabled={!uploadedFiles.length || !templateFile}
                 >
                   {!templateFile 
                     ? 'Loading Template...' 
-                    : !selectedFile 
-                      ? 'Select Source File'
-                      : 'Process File'
+                    : !uploadedFiles.length 
+                      ? 'Upload Source Files'
+                      : 'Process Files'
                   }
                 </button>
               </div>
@@ -556,9 +563,9 @@ export default function Business() {
                   <div className="flex justify-center">
                     <button
                       onClick={handleGenerateTemplate}
-                      disabled={!selectedFile || Object.keys(mappings).length === 0}
+                      disabled={!uploadedFiles.length || Object.keys(mappings).length === 0}
                       className={`px-6 py-3 rounded-lg transition-colors ${
-                        selectedFile && Object.keys(mappings).length > 0
+                        uploadedFiles.length > 0 && Object.keys(mappings).length > 0
                           ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
                           : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       }`}
@@ -599,7 +606,7 @@ export default function Business() {
           {showMapping && workbookData ? (
             <div className="flex flex-col flex-grow min-h-0">
               <div className="mb-4 p-4 bg-blue-100 text-[#64afec] rounded-md flex-shrink-0">
-                {selectedFile?.name}
+                {uploadedFiles.length > 0 ? uploadedFiles[0].name : ''}
               </div>
               <div className="flex-grow overflow-hidden">
                 <MappingInterface 
@@ -611,9 +618,9 @@ export default function Business() {
             </div>
           ) : (
             <div className="flex items-center justify-center h-[200px] text-lg text-gray-500">
-              {selectedFile 
+              {uploadedFiles.length > 0 
                 ? "Click Process to start mapping" 
-                : "Select a source file to process"}
+                : "Upload source files to process"}
             </div>
           )}
         </div>

@@ -49,6 +49,11 @@ export default function MappingInterface({ workbookData = [], templateData = [],
     const currentSheet = workbookData[activeSheet];
     if (!currentSheet) return;
 
+    // Track used source fields to prevent duplicates
+    const usedSourceFields = new Set(
+      Object.values(mappings).map(mapping => mapping.split('|')[1])
+    );
+
     // Check if we already have mappings for this sheet
     const hasExistingMappings = currentSheet.headers.some(header => {
       const templateKey = `${currentSheet.name}|${header.field}`;
@@ -64,11 +69,12 @@ export default function MappingInterface({ workbookData = [], templateData = [],
         const templateField = header.field;
         const templateKey = `${currentSheet.name}|${templateField}`;
         
-        // Only map if not already mapped
-        if (!newMappings[templateKey]) {
+        // Only map if not already mapped and field not used
+        if (!newMappings[templateKey] && !usedSourceFields.has(header.field)) {
           const similarField = findSimilarField(templateField);
-          if (similarField) {
+          if (similarField && !usedSourceFields.has(similarField.split('|')[1])) {
             newMappings[templateKey] = similarField;
+            usedSourceFields.add(similarField.split('|')[1]);
             hasAddedMapping = true;
           }
         }
@@ -76,7 +82,6 @@ export default function MappingInterface({ workbookData = [], templateData = [],
 
       if (hasAddedMapping) {
         setMappings(newMappings);
-        // Notify parent component about the new mappings
         onGenerateTemplate(newMappings);
       }
     }
@@ -87,14 +92,20 @@ export default function MappingInterface({ workbookData = [], templateData = [],
       const newMappings = { ...mappings };
       let hasNewMappings = false;
 
+      // Track used source fields to prevent duplicates
+      const usedSourceFields = new Set(
+        Object.values(mappings).map(mapping => mapping.split('|')[1])
+      );
+
       templateData.forEach(templateSheet => {
         templateSheet.headers.forEach(header => {
           const templateKey = `${templateSheet.name}|${header.field}`;
-          // Only auto-map if no mapping exists
+          // Only auto-map if no mapping exists and field not used
           if (!mappings[templateKey]) {
             const matchingSource = findMatchingSourceField(header.field);
-            if (matchingSource) {
+            if (matchingSource && !usedSourceFields.has(matchingSource.split('|')[1])) {
               newMappings[templateKey] = matchingSource;
+              usedSourceFields.add(matchingSource.split('|')[1]);
               hasNewMappings = true;
             }
           }
@@ -106,7 +117,7 @@ export default function MappingInterface({ workbookData = [], templateData = [],
         onGenerateTemplate(newMappings);
       }
     }
-  }, [templateData, workbookData]);
+  }, [templateData, workbookData, mappings, findMatchingSourceField, onGenerateTemplate]);
 
   const handleMapping = (templateSheet, templateField, value) => {
     const templateKey = `${templateSheet}|${templateField}`;
@@ -143,32 +154,23 @@ export default function MappingInterface({ workbookData = [], templateData = [],
 
   return (
     <div className="flex flex-col h-full">
-      {/* Source Sheet Tabs */}
-      <div className="flex space-x-2 mb-4 overflow-x-auto">
-        {workbookData.map((sheet, index) => (
-          <button
-            key={sheet.name}
-            onClick={() => setActiveSheet(index)}
-            className={`px-4 py-2 rounded-t-lg text-sm whitespace-nowrap ${
-              index === activeSheet
-                ? 'bg-[#64afec] text-white'
-                : getSheetHasMappings(sheet.name)
-                  ? 'bg-blue-100 text-[#64afec]'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {sheet.name}
-          </button>
-        ))}
-      </div>
-
       {/* Mapping Table */}
       <div className="flex-grow overflow-auto">
         <table className="w-full border-collapse">
           <thead className="bg-gray-50 sticky top-0">
             <tr>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 w-1/2">Template Fields</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 w-1/2">Source Fields</th>
+              <th className="px-4 py-2 text-left w-1/2">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-gray-500">Template Fields</span>
+                  <span className="text-xs text-gray-400 mt-1">Sheet: {templateData[0].name}</span>
+                </div>
+              </th>
+              <th className="px-4 py-2 text-left w-1/2">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-gray-500">Source Fields</span>
+                  <span className="text-xs text-gray-400 mt-1">Sheet: {workbookData[activeSheet]?.name}</span>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -176,9 +178,6 @@ export default function MappingInterface({ workbookData = [], templateData = [],
               <React.Fragment key={templateSheet.name}>
                 {/* Template Sheet Header */}
                 <tr className="bg-gray-50">
-                  <td colSpan="2" className="px-4 py-2 text-sm font-medium text-gray-700">
-                    Sheet: {templateSheet.name}
-                  </td>
                 </tr>
                 {/* Template Fields */}
                 {templateSheet.headers.map((header, fieldIndex) => {

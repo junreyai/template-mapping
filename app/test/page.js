@@ -170,7 +170,7 @@ export default function Test() {
   }, []);
 
   const handleGenerateTemplate = useCallback(async () => {
-    console.log('Current mappings:', mappings); // Add logging for debugging
+    console.log('Current mappings:', mappings);
     
     if (!selectedFiles.length || !templateFile || !workbookData) {
       toast.error('Please upload both source and template files');
@@ -185,53 +185,50 @@ export default function Test() {
     try {
       // Create new workbook for mapped data
       const newWorkbook = XLSX.utils.book_new();
-      let hasGeneratedAnySheet = false;
 
-      // Get unique sheet names from mappings
-      const mappedSheetNames = new Set(
-        Object.values(mappings).map(mapping => mapping.split('|')[0])
-      );
+      // Create a single output sheet for all mapped fields
+      const outputSheet = XLSX.utils.aoa_to_sheet([[]]);
+      const allMappings = Object.entries(mappings);
 
-      // Process each mapped sheet
-      for (const sheetName of mappedSheetNames) {
-        // Find the source sheet
-        const sourceSheet = workbookData.find(sheet => sheet.name === sheetName);
-        if (!sourceSheet) continue;
+      if (allMappings.length === 0) {
+        toast.error('No valid data to generate template');
+        return;
+      }
 
-        // Create a new sheet
-        const newSheet = XLSX.utils.aoa_to_sheet([[]]);
+      // Create header row from template fields
+      const headerRow = allMappings.map(([templateKey]) => templateKey.split('|')[1]);
+      XLSX.utils.sheet_add_aoa(outputSheet, [headerRow], { origin: 0 });
 
-        // Get all mappings for this sheet
-        const sheetMappings = Object.entries(mappings)
-          .filter(([_, value]) => value.startsWith(`${sheetName}|`));
+      // Get all unique source sheets and their data
+      const sourceSheets = new Map();
+      allMappings.forEach(([_, sourceMapping]) => {
+        const [sheetName] = sourceMapping.split('|');
+        if (!sourceSheets.has(sheetName)) {
+          const sheet = workbookData.find(s => s.name === sheetName);
+          if (sheet) sourceSheets.set(sheetName, sheet);
+        }
+      });
 
-        if (sheetMappings.length === 0) continue;
-
-        // Create header row from template fields
-        const headerRow = sheetMappings.map(([templateKey]) => templateKey.split('|')[1]);
-        XLSX.utils.sheet_add_aoa(newSheet, [headerRow], { origin: 0 });
-
-        // Map data according to mappings
+      // Combine data from all source sheets
+      let allRows = [];
+      sourceSheets.forEach((sourceSheet) => {
         const mappedData = sourceSheet.data.map(row => {
-          return sheetMappings.map(([templateKey, sourceMapping]) => {
-            const [_, sourceField] = sourceMapping.split('|');
+          return allMappings.map(([_, sourceMapping]) => {
+            const [mappedSheetName, sourceField] = sourceMapping.split('|');
+            if (mappedSheetName !== sourceSheet.name) return '';
+            
             const sourceHeaderIndex = sourceSheet.headers.findIndex(h => h.field === sourceField);
             return sourceHeaderIndex >= 0 ? row[sourceHeaderIndex] || '' : '';
           });
         });
+        allRows = [...allRows, ...mappedData];
+      });
 
-        // Add mapped data to sheet
-        XLSX.utils.sheet_add_aoa(newSheet, mappedData, { origin: 'A2' });
-        
-        // Add the sheet to workbook
-        XLSX.utils.book_append_sheet(newWorkbook, newSheet, sheetName);
-        hasGeneratedAnySheet = true;
-      }
-
-      if (!hasGeneratedAnySheet) {
-        toast.error('No valid data to generate template');
-        return;
-      }
+      // Add mapped data to output sheet
+      XLSX.utils.sheet_add_aoa(outputSheet, allRows, { origin: 'A2' });
+      
+      // Add the output sheet to workbook
+      XLSX.utils.book_append_sheet(newWorkbook, outputSheet, 'Output');
 
       // Generate Excel file
       const excelBuffer = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
@@ -256,10 +253,7 @@ export default function Test() {
       link.href = url;
       
       // Generate filename
-      const baseFileName = selectedFiles.length > 0 
-        ? selectedFiles[0].name.split('.').slice(0, -1).join('.')
-        : 'template';
-      const fileName = `${baseFileName}_mapped.xlsx`;
+      const fileName = 'Output.xlsx';
       
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
