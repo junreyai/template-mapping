@@ -201,20 +201,38 @@ export default function MappingInterface({ workbookData = [], templateData = [],
                             onChange={(e) => handleMapping(templateSheet.name, templateField, e.target.value)}
                             onFocus={() => setActiveSelect(templateKey)}
                             onBlur={() => setActiveSelect(null)}
-                            className={`w-full p-2 text-sm border rounded-lg ${
-                              activeSelect === templateKey ? 'border-[#64afec]' : 'border-gray-300'
-                            }`}
+                            className={`
+                              w-full p-2.5 text-sm
+                              bg-white border rounded-lg
+                              shadow-sm transition-all duration-200
+                              hover:border-blue-300
+                              focus:ring-2 focus:ring-blue-200 focus:border-[#64afec]
+                              appearance-none
+                              bg-[url('data:image/svg+xml;charset=US-ASCII,<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 10L12 15L17 10" stroke="%236B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>')] 
+                              bg-no-repeat bg-right-1 bg-[length:20px] pr-10
+                              ${activeSelect === templateKey ? 'border-[#64afec] ring-2 ring-blue-200' : 'border-gray-300'}
+                            `}
                           >
-                            <option value="">Select a field</option>
+                            <option value="" className="text-gray-500 italic">Select a field</option>
                             {workbookData.map(sheet => (
-                              <optgroup key={sheet.name} label={sheet.name}>
+                              <optgroup 
+                                key={sheet.name} 
+                                label={sheet.name}
+                                className="font-semibold bg-gray-50"
+                              >
                                 {sheet.headers.map((sourceHeader, idx) => {
                                   const value = `${sheet.name}|${sourceHeader.field}`;
+                                  const isMatch = templateField.toLowerCase().trim() === sourceHeader.field.toLowerCase().trim();
                                   return (
                                     <option
                                       key={idx}
                                       value={value}
                                       disabled={selectedFields.has(value) && value !== selectedValue}
+                                      className={`
+                                        py-2 px-4
+                                        ${isMatch ? 'text-blue-600 font-medium bg-blue-50' : 'text-gray-700'}
+                                        ${selectedFields.has(value) && value !== selectedValue ? 'text-gray-400' : ''}
+                                      `}
                                     >
                                       {sourceHeader.field}
                                     </option>
