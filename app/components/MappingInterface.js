@@ -25,58 +25,67 @@ export default function MappingInterface({ workbookData = [], templateData = [],
     return null;
   };
 
+  // Reset activeSheet when workbookData changes
+  useEffect(() => {
+    setActiveSheet(0);
+  }, [workbookData]);
+
   // Auto-map fields when workbookData changes
   useEffect(() => {
-    if (!templateData || !templateData[activeSheet] || !workbookData || workbookData.length === 0) return;
+    if (!workbookData || workbookData.length === 0 || !templateData || !templateData[0]) return;
+
+    const currentSheet = workbookData[activeSheet];
+    if (!currentSheet) return;
 
     // Check if we already have mappings for this sheet
-    const templateSheetName = templateData[activeSheet].name;
-    const hasExistingMappings = templateData[activeSheet].headers.some(header => {
-      const templateKey = `${templateSheetName}|${header.field}`;
+    const hasExistingMappings = currentSheet.headers.some(header => {
+      const templateKey = `${currentSheet.name}|${header.field}`;
       return mappings[templateKey];
     });
 
     // Only perform auto-mapping if there are no existing mappings
     if (!hasExistingMappings) {
       const newMappings = { ...mappings };
+      let hasAddedMapping = false;
       
-      templateData[activeSheet].headers.forEach(header => {
+      currentSheet.headers.forEach(header => {
         const templateField = header.field;
-        const templateKey = `${templateSheetName}|${templateField}`;
+        const templateKey = `${currentSheet.name}|${templateField}`;
         
         // Only map if not already mapped
         if (!newMappings[templateKey]) {
           const similarField = findSimilarField(templateField);
           if (similarField) {
             newMappings[templateKey] = similarField;
+            hasAddedMapping = true;
           }
         }
       });
 
-      setMappings(newMappings);
-      onGenerateTemplate(newMappings);
+      if (hasAddedMapping) {
+        setMappings(newMappings);
+        // Notify parent component about the new mappings
+        onGenerateTemplate(newMappings);
+      }
     }
-  }, [workbookData, templateData, activeSheet, findSimilarField]);
+  }, [workbookData, activeSheet, findSimilarField, templateData, mappings, onGenerateTemplate]);
 
   const handleMapping = (templateField, value) => {
-    if (!templateData || !templateData[activeSheet]) return;
+    if (!workbookData || !workbookData[activeSheet]) return;
 
-    const templateSheetName = templateData[activeSheet].name;
-    const templateKey = `${templateSheetName}|${templateField}`;
+    const currentSheet = workbookData[activeSheet];
+    const templateKey = `${currentSheet.name}|${templateField}`;
 
+    const newMappings = { ...mappings };
     if (!value) {
-      const newMappings = { ...mappings };
       delete newMappings[templateKey];
-      setMappings(newMappings);
-      onGenerateTemplate(newMappings);
     } else {
-      const newMappings = {
-        ...mappings,
-        [templateKey]: value
-      };
-      setMappings(newMappings);
-      onGenerateTemplate(newMappings);
+      newMappings[templateKey] = value;
     }
+    
+    setMappings(newMappings);
+    // Notify parent component about the mapping change
+    onGenerateTemplate(newMappings);
   };
 
   const getSelectedSourceFields = () => {
@@ -93,15 +102,18 @@ export default function MappingInterface({ workbookData = [], templateData = [],
     return Object.keys(mappings).some(key => key.startsWith(`${sheetName}|`));
   };
 
-  if (!templateData || templateData.length === 0) {
+  if (!workbookData || workbookData.length === 0) {
     return null;
   }
+
+  const currentSheet = workbookData[activeSheet];
+  if (!currentSheet) return null;
 
   return (
     <div className="flex flex-col h-full">
       {/* Sheet Tabs */}
       <div className="flex space-x-2 mb-4 overflow-x-auto">
-        {templateData.map((sheet, index) => (
+        {workbookData.map((sheet, index) => (
           <button
             key={sheet.name}
             onClick={() => setActiveSheet(index)}
@@ -128,9 +140,9 @@ export default function MappingInterface({ workbookData = [], templateData = [],
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {templateData[activeSheet].headers.map((header, index) => {
+            {currentSheet.headers.map((header, index) => {
               const templateField = header.field;
-              const templateKey = `${templateData[activeSheet].name}|${templateField}`;
+              const templateKey = `${currentSheet.name}|${templateField}`;
               const selectedValue = mappings[templateKey];
               const selectedFields = getSelectedSourceFields();
 

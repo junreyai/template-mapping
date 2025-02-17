@@ -54,13 +54,13 @@ export default function Test() {
             const arrayBuffer = reader.result;
             const workbook = XLSX.read(arrayBuffer, { type: 'array' });
             
-            // Process template sheets
-            const sheets = workbook.SheetNames.map(name => {
-              const sheet = workbook.Sheets[name];
+            // Process template sheets with actual sheet names
+            const sheets = workbook.SheetNames.map(sheetName => {
+              const sheet = workbook.Sheets[sheetName];
               const headerRow = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || [];
               
               return {
-                name,
+                name: sheetName, // Use actual sheet name from Excel
                 headers: headerRow.map(header => ({ field: header?.toString() || '' }))
                   .filter(header => header.field.trim() !== '')
               };
@@ -138,8 +138,8 @@ export default function Test() {
             name: sheetName,
             headers: headers.map(header => ({ field: header })),
             data: sourceData.slice(1),
-            fileName: file.name, // Add filename to identify source
-            fileId: file.id // Add fileId to identify source
+            fileName: file.name,
+            fileId: file.id
           };
         }).filter(sheet => sheet !== null && sheet.headers.length > 0);
         
@@ -156,7 +156,6 @@ export default function Test() {
 
       setWorkbookData(allSheets);
       setShowMapping(true);
-      // Set the first file as active
       setActiveFile(selectedFiles[0]);
       toast.success('Files processed successfully');
     } catch (error) {
@@ -166,12 +165,20 @@ export default function Test() {
   }, [selectedFiles, templateFile]);
 
   const handleMappingChange = useCallback((newMappings) => {
+    console.log('New mappings:', newMappings); // Add logging for debugging
     setMappings(newMappings);
   }, []);
 
   const handleGenerateTemplate = useCallback(async () => {
+    console.log('Current mappings:', mappings); // Add logging for debugging
+    
     if (!selectedFiles.length || !templateFile || !workbookData) {
       toast.error('Please upload both source and template files');
+      return;
+    }
+
+    if (Object.keys(mappings).length === 0) {
+      toast.error('Please map at least one field before generating template');
       return;
     }
 
@@ -180,82 +187,50 @@ export default function Test() {
       const newWorkbook = XLSX.utils.book_new();
       let hasGeneratedAnySheet = false;
 
-      // Process each template sheet
-      templateData.forEach((templateSheet, sheetIndex) => {
+      // Get unique sheet names from mappings
+      const mappedSheetNames = new Set(
+        Object.values(mappings).map(mapping => mapping.split('|')[0])
+      );
+
+      // Process each mapped sheet
+      for (const sheetName of mappedSheetNames) {
+        // Find the source sheet
+        const sourceSheet = workbookData.find(sheet => sheet.name === sheetName);
+        if (!sourceSheet) continue;
+
         // Create a new sheet
         const newSheet = XLSX.utils.aoa_to_sheet([[]]);
 
-        // Get template headers for this sheet
-        const templateHeaders = templateSheet.headers.map(header => 
-          `${templateSheet.name}|${header.field}`
-        );
-        const headerRow = templateHeaders.map(header => header.split('|')[1]);
-        
-        // Check if this sheet has any mappings
-        const hasMappings = templateHeaders.some(field => mappings[field]);
-        if (!hasMappings) {
-          // Only show error for the first sheet
-          if (sheetIndex === 0) {
-            toast.error('Please map at least one field before generating template');
-            return;
-          }
-          // Skip other sheets silently
-          return;
-        }
+        // Get all mappings for this sheet
+        const sheetMappings = Object.entries(mappings)
+          .filter(([_, value]) => value.startsWith(`${sheetName}|`));
 
-        // Add headers to sheet
+        if (sheetMappings.length === 0) continue;
+
+        // Create header row from template fields
+        const headerRow = sheetMappings.map(([templateKey]) => templateKey.split('|')[1]);
         XLSX.utils.sheet_add_aoa(newSheet, [headerRow], { origin: 0 });
 
-        // Find corresponding source sheet and its data
-        const sourceSheetMappings = new Map(); // Map to store source sheet data
-        templateHeaders.forEach(templateField => {
-          const mapping = mappings[templateField];
-          if (mapping) {
-            const [sheetName, field] = mapping.split('|');
-            if (!sourceSheetMappings.has(sheetName)) {
-              const sourceSheet = workbookData.find(sheet => sheet.name === sheetName);
-              if (sourceSheet) {
-                sourceSheetMappings.set(sheetName, sourceSheet);
-              }
-            }
-          }
-        });
-
-        // Get primary source sheet (first one with mappings)
-        const primarySourceSheet = sourceSheetMappings.values().next().value;
-        if (!primarySourceSheet) {
-          // Skip this sheet silently
-          return;
-        }
-
         // Map data according to mappings
-        const mappedData = primarySourceSheet.data.map(row => {
-          return templateHeaders.map(templateField => {
-            const sourceField = mappings[templateField];
-            if (!sourceField) return ''; // Return empty string for unmapped fields
-
-            const [sourceSheetName, sourceHeader] = sourceField.split('|');
-            const sourceSheet = sourceSheetMappings.get(sourceSheetName);
-            if (!sourceSheet) return '';
-
-            const sourceHeaderObj = sourceSheet.headers.find(h => h.field === sourceHeader);
-            if (!sourceHeaderObj) return '';
-
-            const sourceIndex = sourceSheet.headers.indexOf(sourceHeaderObj);
-            return row[sourceIndex] || '';
+        const mappedData = sourceSheet.data.map(row => {
+          return sheetMappings.map(([templateKey, sourceMapping]) => {
+            const [_, sourceField] = sourceMapping.split('|');
+            const sourceHeaderIndex = sourceSheet.headers.findIndex(h => h.field === sourceField);
+            return sourceHeaderIndex >= 0 ? row[sourceHeaderIndex] || '' : '';
           });
         });
 
         // Add mapped data to sheet
         XLSX.utils.sheet_add_aoa(newSheet, mappedData, { origin: 'A2' });
         
-        // Add the sheet to workbook with original template sheet name
-        XLSX.utils.book_append_sheet(newWorkbook, newSheet, templateSheet.name);
+        // Add the sheet to workbook
+        XLSX.utils.book_append_sheet(newWorkbook, newSheet, sheetName);
         hasGeneratedAnySheet = true;
-      });
+      }
 
       if (!hasGeneratedAnySheet) {
-        return; // Exit silently if no sheets were generated (error already shown if needed)
+        toast.error('No valid data to generate template');
+        return;
       }
 
       // Generate Excel file
@@ -270,7 +245,7 @@ export default function Test() {
       console.error('Generation error:', error);
       toast.error('Error generating template. Please try again.');
     }
-  }, [selectedFiles, templateFile, workbookData, mappings, templateData]);
+  }, [selectedFiles, templateFile, workbookData, mappings]);
 
   const handleDownloadTemplate = useCallback(() => {
     if (!generatedTemplate) return;
