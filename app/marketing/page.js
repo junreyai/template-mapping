@@ -563,6 +563,44 @@ export default function Marketing() {
                 No template files found
               </div>
             )}
+            {/* Template Actions */}
+            {showMapping && (
+              <div className="mt-4">
+                {!generatedTemplate ? (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleGenerateTemplate}
+                      disabled={!selectedFile || Object.keys(mappings).length === 0}
+                      className={`px-6 py-3 rounded-lg transition-colors ${
+                        selectedFile && Object.keys(mappings).length > 0
+                          ? 'bg-[#64afec] hover:bg-[#5193c7] text-white' 
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Generate Template
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-green-700">Click the ICON to download.</span>
+                      <button
+                        onClick={handleDownloadTemplate}
+                        className="px-4 py-2 transition-colors text-sm hover:bg-green-100 rounded-lg"
+                        title="Download template"
+                      >
+                        <Image 
+                          src="/download.png"
+                          alt="Download template"
+                          width={20}
+                          height={20}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
