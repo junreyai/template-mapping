@@ -185,8 +185,6 @@ export default function Test() {
     try {
       // Create new workbook for mapped data
       const newWorkbook = XLSX.utils.book_new();
-
-      // Create a single output sheet for all mapped fields
       const outputSheet = XLSX.utils.aoa_to_sheet([[]]);
       const allMappings = Object.entries(mappings);
 
@@ -199,34 +197,81 @@ export default function Test() {
       const headerRow = allMappings.map(([templateKey]) => templateKey.split('|')[1]);
       XLSX.utils.sheet_add_aoa(outputSheet, [headerRow], { origin: 0 });
 
-      // Get all unique source sheets and their data
-      const sourceSheets = new Map();
-      allMappings.forEach(([_, sourceMapping]) => {
-        const [sheetName] = sourceMapping.split('|');
-        if (!sourceSheets.has(sheetName)) {
-          const sheet = workbookData.find(s => s.name === sheetName);
-          if (sheet) sourceSheets.set(sheetName, sheet);
+      // Group sheets by file ID for faster lookup
+      const fileSheets = new Map();
+      workbookData.forEach(sheet => {
+        if (!fileSheets.has(sheet.fileId)) {
+          fileSheets.set(sheet.fileId, new Map());
         }
+        fileSheets.get(sheet.fileId).set(sheet.name, sheet);
       });
 
-      // Combine data from all source sheets
-      let allRows = [];
-      sourceSheets.forEach((sourceSheet) => {
-        const mappedData = sourceSheet.data.map(row => {
-          return allMappings.map(([_, sourceMapping]) => {
-            const [mappedSheetName, sourceField] = sourceMapping.split('|');
-            if (mappedSheetName !== sourceSheet.name) return '';
-            
-            const sourceHeaderIndex = sourceSheet.headers.findIndex(h => h.field === sourceField);
-            return sourceHeaderIndex >= 0 ? row[sourceHeaderIndex] || '' : '';
+      // Create a map to store all data by column
+      const columnData = new Map();
+      allMappings.forEach(([templateKey], index) => {
+        columnData.set(index, []);
+      });
+
+      // Process each file's data
+      selectedFiles.forEach(file => {
+        const sheets = fileSheets.get(file.id);
+        if (!sheets) return;
+
+        // Process each mapping
+        allMappings.forEach(([_, sourceMapping], mappingIndex) => {
+          const [sheetName, fieldName] = sourceMapping.split('|');
+          const sheet = sheets.get(sheetName);
+          
+          if (!sheet || !sheet.data || sheet.data.length === 0) return;
+          
+          const headerIndex = sheet.headers.findIndex(h => h.field === fieldName);
+          if (headerIndex === -1) return;
+
+          // Get all values for this field
+          const values = sheet.data.map(row => row[headerIndex] || '');
+          
+          // Add values to column data if they're not empty
+          values.forEach((value, idx) => {
+            if (value !== '') {
+              if (columnData.get(mappingIndex).length <= idx) {
+                // Fill any gaps with empty strings
+                while (columnData.get(mappingIndex).length < idx) {
+                  columnData.get(mappingIndex).push('');
+                }
+                columnData.get(mappingIndex).push(value);
+              }
+            }
           });
         });
-        allRows = [...allRows, ...mappedData];
       });
 
-      // Add mapped data to output sheet
-      XLSX.utils.sheet_add_aoa(outputSheet, allRows, { origin: 'A2' });
-      
+      // Find the maximum length of any column
+      const maxLength = Math.max(...Array.from(columnData.values()).map(col => col.length));
+
+      // Create output rows
+      const outputRows = [];
+      for (let i = 0; i < maxLength; i++) {
+        const row = new Array(allMappings.length).fill('');
+        let hasData = false;
+
+        // Fill in data for each column
+        columnData.forEach((colData, colIndex) => {
+          if (i < colData.length && colData[i] !== '') {
+            row[colIndex] = colData[i];
+            hasData = true;
+          }
+        });
+
+        if (hasData) {
+          outputRows.push(row);
+        }
+      }
+
+      // Add all data starting from row 2
+      if (outputRows.length > 0) {
+        XLSX.utils.sheet_add_aoa(outputSheet, outputRows, { origin: { r: 1, c: 0 } });
+      }
+
       // Add the output sheet to workbook
       XLSX.utils.book_append_sheet(newWorkbook, outputSheet, 'Output');
 
