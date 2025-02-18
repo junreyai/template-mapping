@@ -37,6 +37,14 @@ export default function MappingInterface({ workbookData = [], templateData = [],
     return '';
   };
 
+  const hasMatchingSourceField = (templateField) => {
+    return workbookData.some(sheet => 
+      sheet.headers.some(header => 
+        header.field.toLowerCase().trim() === templateField.toLowerCase().trim()
+      )
+    );
+  };
+
   // Reset activeSheet when workbookData changes
   useEffect(() => {
     setActiveSheet(0);
@@ -188,12 +196,12 @@ export default function MappingInterface({ workbookData = [], templateData = [],
 
                   return (
                     <tr key={`${templateSheet.name}-${fieldIndex}`} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 text-sm text-gray-900 w-1/2">
+                      <td className={`px-4 py-2 text-sm w-1/2 ${hasMatchingSourceField(templateField) ? 'bg-green-50 text-green-600' : 'text-gray-900'}`}>
                         <div className="flex items-center">
                           <span className="truncate">{templateField}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-2 w-1/2">
+                      <td className={`px-4 py-2 w-1/2 ${hasMatchingSourceField(templateField) ? 'bg-green-50' : ''}`}>
                         <div className="flex items-center">
                           <select
                             value={selectedValue || ''}
@@ -210,6 +218,7 @@ export default function MappingInterface({ workbookData = [], templateData = [],
                               bg-[url('data:image/svg+xml;charset=US-ASCII,<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 10L12 15L17 10" stroke="%236B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>')] 
                               bg-no-repeat bg-right-1 bg-[length:20px] pr-10
                               ${activeSelect === templateKey ? 'border-[#64afec] ring-2 ring-blue-200' : 'border-gray-300'}
+                              ${hasMatchingSourceField(templateField) ? 'text-green-600' : ''}
                             `}
                           >
                             <option value="" className="text-gray-500 italic">Select a field</option>
@@ -217,7 +226,7 @@ export default function MappingInterface({ workbookData = [], templateData = [],
                               <optgroup 
                                 key={sheet.name} 
                                 label={sheet.name}
-                                className="font-semibold bg-gray-50"
+                                className="font-semibold bg-gray-50 text-gray-700"
                               >
                                 {sheet.headers.map((sourceHeader, idx) => {
                                   const value = `${sheet.name}|${sourceHeader.field}`;
@@ -229,7 +238,7 @@ export default function MappingInterface({ workbookData = [], templateData = [],
                                       disabled={selectedFields.has(value) && value !== selectedValue}
                                       className={`
                                         py-2 px-4
-                                        ${isMatch ? 'text-blue-600 font-medium bg-blue-50' : 'text-gray-700'}
+                                        ${isMatch ? 'text-green-600 font-medium bg-green-50' : 'text-gray-700'}
                                         ${selectedFields.has(value) && value !== selectedValue ? 'text-gray-400' : ''}
                                       `}
                                     >
