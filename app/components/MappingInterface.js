@@ -57,64 +57,71 @@ export default function MappingInterface({ workbookData = [], templateData = [],
     const currentSheet = workbookData[activeSheet];
     if (!currentSheet) return;
 
-    // Track used source fields to prevent duplicates
-    const usedSourceFields = new Set(
-      Object.values(mappings).map(mapping => mapping.split('|')[1])
-    );
-
-    // Check if we already have mappings for this sheet
-    const hasExistingMappings = currentSheet.headers.some(header => {
-      const templateKey = `${currentSheet.name}|${header.field}`;
-      return mappings[templateKey];
-    });
-
     // Only perform auto-mapping if there are no existing mappings
+    const hasExistingMappings = Object.keys(mappings).length > 0;
     if (!hasExistingMappings) {
-      const newMappings = { ...mappings };
-      let hasAddedMapping = false;
-      
-      currentSheet.headers.forEach(header => {
-        const templateField = header.field;
-        const templateKey = `${currentSheet.name}|${templateField}`;
-        
-        // Only map if not already mapped and field not used
-        if (!newMappings[templateKey] && !usedSourceFields.has(header.field)) {
-          const similarField = findSimilarField(templateField);
-          if (similarField && !usedSourceFields.has(similarField.split('|')[1])) {
-            newMappings[templateKey] = similarField;
-            usedSourceFields.add(similarField.split('|')[1]);
-            hasAddedMapping = true;
+      const newMappings = {};
+      const usedSourceFields = new Set();
+
+      // Iterate through template fields first to maintain sequence
+      templateData.forEach(templateSheet => {
+        templateSheet.headers.forEach(header => {
+          const templateKey = `${templateSheet.name}|${header.field}`;
+          
+          // Find matching source field that hasn't been used
+          for (const sourceSheet of workbookData) {
+            const matchingHeader = sourceSheet.headers.find(sourceHeader => 
+              !usedSourceFields.has(`${sourceSheet.name}|${sourceHeader.field}`) &&
+              sourceHeader.field.toLowerCase().trim() === header.field.toLowerCase().trim()
+            );
+            
+            if (matchingHeader) {
+              const sourceValue = `${sourceSheet.name}|${matchingHeader.field}`;
+              newMappings[templateKey] = sourceValue;
+              usedSourceFields.add(sourceValue);
+              break;
+            }
           }
-        }
+        });
       });
 
-      if (hasAddedMapping) {
+      if (Object.keys(newMappings).length > 0) {
         setMappings(newMappings);
         onGenerateTemplate(newMappings);
       }
     }
-  }, [workbookData, activeSheet, findSimilarField, templateData, mappings, onGenerateTemplate]);
+  }, [workbookData, activeSheet, templateData, mappings, onGenerateTemplate]);
 
   useEffect(() => {
     if (templateData && workbookData && workbookData.length > 0) {
       const newMappings = { ...mappings };
       let hasNewMappings = false;
-
-      // Track used source fields to prevent duplicates
       const usedSourceFields = new Set(
-        Object.values(mappings).map(mapping => mapping.split('|')[1])
+        Object.values(mappings).map(mapping => mapping)
       );
 
+      // Iterate through template fields to maintain sequence
       templateData.forEach(templateSheet => {
         templateSheet.headers.forEach(header => {
           const templateKey = `${templateSheet.name}|${header.field}`;
-          // Only auto-map if no mapping exists and field not used
+          
+          // Only auto-map if no mapping exists
           if (!mappings[templateKey]) {
-            const matchingSource = findMatchingSourceField(header.field);
-            if (matchingSource && !usedSourceFields.has(matchingSource.split('|')[1])) {
+            // Try to find exact match first
+            let matchingSource = findMatchingSourceField(header.field);
+            
+            if (matchingSource && !usedSourceFields.has(matchingSource)) {
               newMappings[templateKey] = matchingSource;
-              usedSourceFields.add(matchingSource.split('|')[1]);
+              usedSourceFields.add(matchingSource);
               hasNewMappings = true;
+            } else {
+              // Try to find similar field if no exact match
+              matchingSource = findSimilarField(header.field);
+              if (matchingSource && !usedSourceFields.has(matchingSource)) {
+                newMappings[templateKey] = matchingSource;
+                usedSourceFields.add(matchingSource);
+                hasNewMappings = true;
+              }
             }
           }
         });
@@ -125,7 +132,7 @@ export default function MappingInterface({ workbookData = [], templateData = [],
         onGenerateTemplate(newMappings);
       }
     }
-  }, [templateData, workbookData, mappings, findMatchingSourceField, onGenerateTemplate]);
+  }, [templateData, workbookData, mappings, findMatchingSourceField, findSimilarField, onGenerateTemplate]);
 
   const handleMapping = (templateSheet, templateField, value) => {
     const templateKey = `${templateSheet}|${templateField}`;

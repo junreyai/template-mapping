@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import MappingInterface from '../components/MappingInterface';
 import FileDropzone from '../components/FileDropzone';
 import { supabase } from '@/lib/supabase';
+import { useNavigationPrompt } from '../hooks/useNavigationPrompt';
 
 export default function Multi() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -21,6 +22,10 @@ export default function Multi() {
   const [error, setError] = useState(null);
   const [templateFiles, setTemplateFiles] = useState([]);
   const [selectedTemplateFile, setSelectedTemplateFile] = useState(null);
+
+  // Add navigation prompt
+  const hasChanges = uploadedFiles.length > 0 || templateFiles.length > 0 || Object.keys(mappings).length > 0;
+  useNavigationPrompt(hasChanges);
 
   const handleFilesUpload = useCallback((files) => {
     if (files && files.length > 0) {

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import MappingInterface from '../components/MappingInterface';
 import FileDropzone from '../components/FileDropzone';
 import { supabase } from '@/lib/supabase';
+import { useNavigationPrompt } from '../hooks/useNavigationPrompt';
 
 export default function Marketing() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -18,10 +19,13 @@ export default function Marketing() {
   const [generatedTemplate, setGeneratedTemplate] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [error, setError] = useState(null);
-  const [files, setFiles] = useState([]);
-  const [selectedTemplateFile, setSelectedTemplateFile] = useState(null);
   const [templateFiles, setTemplateFiles] = useState([]);
+  const [error, setError] = useState(null);
+  const [selectedTemplateFile, setSelectedTemplateFile] = useState(null);
+
+  // Add navigation prompt
+  const hasChanges = uploadedFiles.length > 0 || templateFiles.length > 0 || Object.keys(mappings).length > 0;
+  useNavigationPrompt(hasChanges);
 
   const handleFilesUpload = useCallback((files) => {
     if (files && files.length > 0) {
@@ -338,8 +342,15 @@ export default function Marketing() {
           return;
         }
 
-        // Store all template files
-        setTemplateFiles(data);
+        // Transform the data into the format we need
+        setTemplateFiles(data.map(file => ({
+          id: file.id,
+          name: file.name,
+          type: file.metadata?.mimetype || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          size: file.metadata?.size || 0,
+          path: `${folderPath}${file.name}`,
+          bucketName
+        })));
 
         // Get the first template file by default
         const templateFile = data[0];
@@ -378,12 +389,6 @@ export default function Marketing() {
           setError('No valid headers found in template');
           throw new Error('No valid headers found in template');
         }
-
-        // Store all files data for reference
-        setFiles(data.map(file => ({
-          name: file.name,
-          url: supabase.storage.from(bucketName).getPublicUrl(`${folderPath}${file.name}`).data.publicUrl
-        })));
 
         setTemplateFile({ 
           id: templateFile.id || '',

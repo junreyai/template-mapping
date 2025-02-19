@@ -1,14 +1,19 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { useDropzone } from 'react-dropzone';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
+import { useRouter } from 'next/navigation';
 import MappingInterface from '../components/MappingInterface';
 import FileDropzone from '../components/FileDropzone';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 export default function Create() {
+  const router = useRouter();
+  const [showNavigationModal, setShowNavigationModal] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState('');
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [templateFiles, setTemplateFiles] = useState([]);
   const [templateFile, setTemplateFile] = useState(null);
@@ -165,8 +170,10 @@ export default function Create() {
   }, [selectedFiles, templateFile]);
 
   const handleMappingChange = useCallback((newMappings) => {
-    console.log('New mappings:', newMappings); // Add logging for debugging
+    console.log('New mappings:', newMappings);
     setMappings(newMappings);
+    // Store mapping state in localStorage
+    localStorage.setItem('hasMapping', Object.keys(newMappings).length > 0);
   }, []);
 
   const handleGenerateTemplate = useCallback(async () => {
@@ -186,15 +193,24 @@ export default function Create() {
       // Create new workbook for mapped data
       const newWorkbook = XLSX.utils.book_new();
       const outputSheet = XLSX.utils.aoa_to_sheet([[]]);
-      const allMappings = Object.entries(mappings);
 
-      if (allMappings.length === 0) {
+      // Get template fields in their original sequence
+      const templateFields = templateData.flatMap(sheet => 
+        sheet.headers.map(header => `${sheet.name}|${header.field}`)
+      );
+      
+      // Filter mappings to only include fields that are actually mapped
+      const orderedMappings = templateFields
+        .filter(templateKey => mappings[templateKey])
+        .map(templateKey => [templateKey, mappings[templateKey]]);
+
+      if (orderedMappings.length === 0) {
         toast.error('No valid data to generate template');
         return;
       }
 
-      // Create header row from template fields
-      const headerRow = allMappings.map(([templateKey]) => templateKey.split('|')[1]);
+      // Create header row from template fields in original sequence
+      const headerRow = orderedMappings.map(([templateKey]) => templateKey.split('|')[1]);
       XLSX.utils.sheet_add_aoa(outputSheet, [headerRow], { origin: 0 });
 
       // Group sheets by file ID for faster lookup
@@ -208,7 +224,7 @@ export default function Create() {
 
       // Create a map to store all data by column
       const columnData = new Map();
-      allMappings.forEach(([templateKey], index) => {
+      orderedMappings.forEach(([templateKey], index) => {
         columnData.set(index, []);
       });
 
@@ -217,8 +233,8 @@ export default function Create() {
         const sheets = fileSheets.get(file.id);
         if (!sheets) return;
 
-        // Process each mapping
-        allMappings.forEach(([_, sourceMapping], mappingIndex) => {
+        // Process each mapping in template sequence
+        orderedMappings.forEach(([_, sourceMapping], mappingIndex) => {
           const [sheetName, fieldName] = sourceMapping.split('|');
           const sheet = sheets.get(sheetName);
           
@@ -251,7 +267,7 @@ export default function Create() {
       // Create output rows
       const outputRows = [];
       for (let i = 0; i < maxLength; i++) {
-        const row = new Array(allMappings.length).fill('');
+        const row = new Array(orderedMappings.length).fill('');
         let hasData = false;
 
         // Fill in data for each column
@@ -287,7 +303,7 @@ export default function Create() {
       console.error('Generation error:', error);
       toast.error('Error generating template. Please try again.');
     }
-  }, [selectedFiles, templateFile, workbookData, mappings]);
+  }, [selectedFiles, templateFile, workbookData, mappings, templateData]);
 
   const handleDownloadTemplate = useCallback(() => {
     if (!generatedTemplate) return;
@@ -362,6 +378,54 @@ export default function Create() {
     setUploadedFiles([]);
     setActiveFile(null);
     toast.success('All data has been reset successfully');
+  }, []);
+
+  const handleNavigation = (path) => {
+    if (showMapping && Object.keys(mappings).length > 0) {
+      setShowNavigationModal(true);
+      setPendingNavigation(path);
+    } else {
+      router.push(path);
+    }
+  };
+
+  const handleConfirmNavigation = () => {
+    setShowNavigationModal(false);
+    router.push(pendingNavigation);
+  };
+
+  const handleCancelNavigation = () => {
+    setShowNavigationModal(false);
+    setPendingNavigation('');
+  };
+
+  useEffect(() => {
+    // Update hasChanges in localStorage whenever files or mappings change
+    const hasChanges = uploadedFiles.length > 0 || templateFiles.length > 0 || Object.keys(mappings).length > 0;
+    localStorage.setItem('hasChanges', hasChanges);
+
+    return () => {
+      localStorage.removeItem('hasChanges');
+    };
+  }, [uploadedFiles, templateFiles, mappings]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      const hasChanges = uploadedFiles.length > 0 || templateFiles.length > 0 || Object.keys(mappings).length > 0;
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [uploadedFiles, templateFiles, mappings]);
+
+  useEffect(() => {
+    return () => {
+      localStorage.removeItem('hasMapping');
+    };
   }, []);
 
   const { getRootProps: getTemplateRootProps, getInputProps: getTemplateInputProps, isDragActive: isTemplateDragActive } = useDropzone({
@@ -656,6 +720,14 @@ export default function Create() {
           </div>
         </div>
       </main>
+      {showNavigationModal && (
+        <ConfirmationModal
+          title="Confirm Navigation"
+          message="You have unsaved changes. Are you sure you want to navigate away?"
+          onConfirm={handleConfirmNavigation}
+          onCancel={handleCancelNavigation}
+        />
+      )}
     </>
   );
 }
