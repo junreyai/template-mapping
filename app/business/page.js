@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import MappingInterface from '../components/MappingInterface';
 import FileDropzone from '../components/FileDropzone';
 import { supabase } from '@/lib/supabase';
+import { useNavigationPrompt } from '../hooks/useNavigationPrompt';
 
 export default function Business() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -21,6 +22,10 @@ export default function Business() {
   const [templateFiles, setTemplateFiles] = useState([]);
   const [error, setError] = useState(null);
   const [selectedTemplateFile, setSelectedTemplateFile] = useState(null);
+
+  // Add navigation prompt
+  const hasChanges = uploadedFiles.length > 0 || templateFiles.length > 0 || Object.keys(mappings).length > 0;
+  useNavigationPrompt(hasChanges);
 
   // Load template from Supabase on component mount
   useEffect(() => {
@@ -606,7 +611,7 @@ export default function Business() {
           {showMapping && workbookData ? (
             <div className="flex flex-col flex-grow min-h-0">
               <div className="mb-4 p-4 bg-blue-100 text-[#64afec] rounded-md flex-shrink-0">
-                {uploadedFiles.length > 0 ? uploadedFiles[0].name : ''}
+              {selectedFile?.name}
               </div>
               <div className="flex-grow overflow-hidden">
                 <MappingInterface 
@@ -618,9 +623,9 @@ export default function Business() {
             </div>
           ) : (
             <div className="flex items-center justify-center h-[200px] text-lg text-gray-500">
-              {uploadedFiles.length > 0 
+              {selectedFile  
                 ? "Click Process to start mapping" 
-                : "Upload source files to process"}
+                : "Select a source file to process"}
             </div>
           )}
         </div>

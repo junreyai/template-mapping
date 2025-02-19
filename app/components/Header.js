@@ -13,11 +13,11 @@ const Header = () => {
   const showHomeButton = ['/create', '/edu', '/business', '/multi', '/marketing'].includes(pathname);
 
   const handleHomeClick = (e) => {
-    if (pathname === '/create') {
+    if (['/create', '/edu', '/business', '/multi', '/marketing'].includes(pathname)) {
       e.preventDefault();
       handleNavigation('/', () => {
-        // Check for any changes (files or mappings)
-        const hasChanges = localStorage.getItem('hasChanges') === 'true';
+        // Check for any changes in the current page
+        const hasChanges = localStorage.getItem(`${pathname}-hasChanges`) === 'true';
         return hasChanges;
       });
     }
