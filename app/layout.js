@@ -2,6 +2,7 @@ import { Public_Sans } from 'next/font/google';
 import { Toaster } from 'react-hot-toast';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import { NavigationProvider } from './context/NavigationContext';
 import './globals.css';
 
 const publicSans = Public_Sans({ 
@@ -19,9 +20,11 @@ export default function RootLayout({ children }) {
     <html lang="en" className={`${publicSans.variable} overflow-x-hidden`}>
       <body className="min-h-screen flex flex-col bg-gray-100 overflow-x-hidden scrollbar-hide">
         <Toaster position="top-right" />
-        <Header/>
-        {children}
-        <Footer/>
+        <NavigationProvider>
+          <Header/>
+          {children}
+          <Footer/>
+        </NavigationProvider>
       </body>
     </html>
   );
