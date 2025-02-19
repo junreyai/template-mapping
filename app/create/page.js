@@ -186,15 +186,24 @@ export default function Create() {
       // Create new workbook for mapped data
       const newWorkbook = XLSX.utils.book_new();
       const outputSheet = XLSX.utils.aoa_to_sheet([[]]);
-      const allMappings = Object.entries(mappings);
 
-      if (allMappings.length === 0) {
+      // Get template fields in their original sequence
+      const templateFields = templateData.flatMap(sheet => 
+        sheet.headers.map(header => `${sheet.name}|${header.field}`)
+      );
+      
+      // Filter mappings to only include fields that are actually mapped
+      const orderedMappings = templateFields
+        .filter(templateKey => mappings[templateKey])
+        .map(templateKey => [templateKey, mappings[templateKey]]);
+
+      if (orderedMappings.length === 0) {
         toast.error('No valid data to generate template');
         return;
       }
 
-      // Create header row from template fields
-      const headerRow = allMappings.map(([templateKey]) => templateKey.split('|')[1]);
+      // Create header row from template fields in original sequence
+      const headerRow = orderedMappings.map(([templateKey]) => templateKey.split('|')[1]);
       XLSX.utils.sheet_add_aoa(outputSheet, [headerRow], { origin: 0 });
 
       // Group sheets by file ID for faster lookup
@@ -208,7 +217,7 @@ export default function Create() {
 
       // Create a map to store all data by column
       const columnData = new Map();
-      allMappings.forEach(([templateKey], index) => {
+      orderedMappings.forEach(([templateKey], index) => {
         columnData.set(index, []);
       });
 
@@ -217,8 +226,8 @@ export default function Create() {
         const sheets = fileSheets.get(file.id);
         if (!sheets) return;
 
-        // Process each mapping
-        allMappings.forEach(([_, sourceMapping], mappingIndex) => {
+        // Process each mapping in template sequence
+        orderedMappings.forEach(([_, sourceMapping], mappingIndex) => {
           const [sheetName, fieldName] = sourceMapping.split('|');
           const sheet = sheets.get(sheetName);
           
@@ -251,7 +260,7 @@ export default function Create() {
       // Create output rows
       const outputRows = [];
       for (let i = 0; i < maxLength; i++) {
-        const row = new Array(allMappings.length).fill('');
+        const row = new Array(orderedMappings.length).fill('');
         let hasData = false;
 
         // Fill in data for each column
@@ -287,7 +296,7 @@ export default function Create() {
       console.error('Generation error:', error);
       toast.error('Error generating template. Please try again.');
     }
-  }, [selectedFiles, templateFile, workbookData, mappings]);
+  }, [selectedFiles, templateFile, workbookData, mappings, templateData]);
 
   const handleDownloadTemplate = useCallback(() => {
     if (!generatedTemplate) return;
