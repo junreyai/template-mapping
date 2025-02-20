@@ -10,7 +10,8 @@ import { supabase } from '@/lib/supabase';
 import { useNavigationPrompt } from '../hooks/useNavigationPrompt';
 
 export default function Business() {
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [activeFile, setActiveFile] = useState(null);
   const [templateFile, setTemplateFile] = useState(null);
   const [workbookData, setWorkbookData] = useState(null);
   const [templateData, setTemplateData] = useState([]);
@@ -143,23 +144,31 @@ export default function Business() {
   }, []);
 
   const handleSelectFile = (file) => {
-    if (selectedFile && selectedFile.id === file.id) {
-      setSelectedFile(null);
-      setShowMapping(false);
-      setWorkbookData(null);
-      setMappings({});
-    } else {
-      setSelectedFile(file);
-      setShowMapping(false);
-      setWorkbookData(null);
-      setMappings({});
-    }
+    setSelectedFiles(prevFiles => {
+      const isSelected = prevFiles.some(f => f.id === file.id);
+      if (isSelected) {
+        // If file is already selected, remove it
+        const newFiles = prevFiles.filter(f => f.id !== file.id);
+        if (newFiles.length === 0) {
+          setShowMapping(false);
+          setWorkbookData(null);
+          setMappings({});
+        }
+        return newFiles;
+      } else {
+        // Add the file to selected files
+        return [...prevFiles, file];
+      }
+    });
   };
 
   const handleRemoveFile = (indexToRemove) => {
+    const removedFile = uploadedFiles[indexToRemove];
     setUploadedFiles(files => files.filter((_, index) => index !== indexToRemove));
-    if (selectedFile && uploadedFiles[indexToRemove]?.id === selectedFile.id) {
-      setSelectedFile(null);
+    setSelectedFiles(files => files.filter(file => file.id !== removedFile.id));
+    
+    // Reset mapping if no files are selected
+    if (selectedFiles.length <= 1) {
       setShowMapping(false);
       setWorkbookData(null);
       setMappings({});
@@ -168,16 +177,16 @@ export default function Business() {
   };
 
   const handleProcess = useCallback(async () => {
-    if (!uploadedFiles.length || !templateFile) {
-      toast.error('Please upload source files');
+    if (!selectedFiles.length || !templateFile) {
+      toast.error('Please select source files');
       return;
     }
 
     try {
-      // Process all uploaded files
+      // Process all selected files
       const allProcessedSheets = [];
       
-      for (const file of uploadedFiles) {
+      for (const file of selectedFiles) {
         // Read each source file
         const sourceWorkbook = XLSX.read(file.data, { type: 'array' });
         
@@ -197,26 +206,27 @@ export default function Business() {
             name: sheetName,
             headers: headers.map(header => ({ field: header })),
             data: sourceData.slice(1),
-            sourceFile: file.name // Add source file name for reference
+            sourceFile: file.name,
+            fileId: file.id // Add fileId for reference
           };
-        }).filter(sheet => sheet !== null && sheet.headers.length > 0);
-        
+        }).filter(Boolean);
+
         allProcessedSheets.push(...processedSheets);
       }
-      
+
       if (allProcessedSheets.length === 0) {
-        toast.error('No valid data found in source files');
-        return;
+        throw new Error('No valid data found in selected files');
       }
 
       setWorkbookData(allProcessedSheets);
+      setActiveFile(selectedFiles[0]);
       setShowMapping(true);
       toast.success('Files processed successfully');
     } catch (error) {
       console.error('Error processing files:', error);
-      toast.error('Error processing files');
+      toast.error(error.message || 'Error processing files');
     }
-  }, [uploadedFiles, templateFile]);
+  }, [selectedFiles, templateFile]);
 
   const handleMappingChange = useCallback((newMappings) => {
     setMappings(newMappings);
@@ -435,7 +445,7 @@ export default function Business() {
                   <div 
                     key={file.id || index} 
                     className={`w-full border rounded-lg px-4 py-2 transition-colors group cursor-pointer ${
-                      selectedFile && selectedFile.id === file.id 
+                      selectedFiles.some(f => f.id === file.id)
                         ? 'bg-blue-100 text-gray-800 border-blue-400' 
                         : 'bg-white hover:bg-gray-50 border-gray-300 hover:border-blue-500'
                     }`}
@@ -444,7 +454,7 @@ export default function Business() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center" style={{ minWidth: '200px' }}>
                         <div className="w-5 h-5 mr-3">
-                          {selectedFile && selectedFile.id === file.id && (
+                          {selectedFiles.some(f => f.id === file.id) && (
                             <Image 
                               src="/check.png"
                               alt="Selected source"
@@ -453,7 +463,7 @@ export default function Business() {
                             />
                           )}
                         </div>
-                        <span className={`text-sm text-lg ${selectedFile && selectedFile.id === file.id ? 'text-gray-800' : 'text-gray-600'}`}>
+                        <span className={`text-sm text-lg ${selectedFiles.some(f => f.id === file.id) ? 'text-gray-800' : 'text-gray-600'}`}>
                           {file.name}
                         </span>
                       </div>
@@ -606,16 +616,50 @@ export default function Business() {
         <div className="bg-white rounded-lg shadow-lg p-6 flex flex-col h-full">
           <div className="flex justify-between items-center mb-6 flex-shrink-0">
             <h2 className="text-2xl font-semibold text-gray-800">Mapping</h2>
+            {showMapping && (
+              <button
+                onClick={() => {
+                  setMappings({});
+                  setActiveFile(selectedFiles[0]);
+                }}
+                className="px-4 py-2 transition-colors text-sm flex items-center gap-2 hover:bg-blue-300 hover:text-white rounded-md"
+              >
+                <Image 
+                  src="/reset.png"
+                  alt="Reset"
+                  width={20}
+                  height={20}
+                />
+                Reset
+              </button>
+            )}
           </div>
         
           {showMapping && workbookData ? (
             <div className="flex flex-col flex-grow min-h-0">
               <div className="mb-4 p-4 bg-blue-100 text-[#64afec] rounded-md flex-shrink-0">
-              {selectedFile?.name}
+                <div className="flex flex-wrap gap-2">
+                  {selectedFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      className={`flex items-center px-3 py-1 rounded-md cursor-pointer transition-colors ${
+                        activeFile?.id === file.id 
+                          ? 'bg-[#64afec] text-white' 
+                          : 'bg-white hover:bg-blue-50 text-[#64afec]'
+                      }`}
+                      onClick={() => {
+                        setActiveFile(file);
+                        toast.success(`Showing sheets from: ${file.name}`);
+                      }}
+                    >
+                      <span>{file.name}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="flex-grow overflow-hidden">
                 <MappingInterface 
-                  workbookData={workbookData}
+                  workbookData={workbookData.filter(sheet => sheet.fileId === activeFile?.id)}
                   templateData={templateData}
                   onGenerateTemplate={handleMappingChange}
                 />
@@ -623,9 +667,9 @@ export default function Business() {
             </div>
           ) : (
             <div className="flex items-center justify-center h-[200px] text-lg text-gray-500">
-              {selectedFile  
+              {selectedFiles.length > 0 
                 ? "Click Process to start mapping" 
-                : "Select a source file to process"}
+                : "Select files to process"}
             </div>
           )}
         </div>
