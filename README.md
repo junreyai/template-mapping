@@ -1,18 +1,22 @@
-🌟 Welcome to the World of Next.js! 🚀
-This project was born from the magic of Next.js and crafted with love using create-next-app.
+# 🌟 Welcome to the World of Next.js! 🚀
 
-🌱 Let's Get Started
+This project was born from the magic of [Next.js](https://nextjs.org) and crafted with love using [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+
+---
+
+## 🌱 Let's Get Started
+
 Embark on your journey by launching the development server:
 
-bash
-Copy
+```bash
 npm run dev
- or
+# or
 yarn dev
- or
+# or
 pnpm dev
- or
+# or
 bun dev
+
 Now, open your browser and visit http://localhost:3000 to see the masterpiece in action.
 
 Feel free to start editing your page by diving into app/page.js. Watch the page automatically update as you make changes—code and creativity at the speed of thought!
