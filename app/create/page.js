@@ -9,9 +9,11 @@ import { useRouter } from 'next/navigation';
 import MappingInterface from '../components/MappingInterface';
 import FileDropzone from '../components/FileDropzone';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { useNavigation } from '../context/NavigationContext';
 
 export default function Create() {
   const router = useRouter();
+  const { handleNavigation } = useNavigation();
   const [showNavigationModal, setShowNavigationModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState('');
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -367,45 +369,16 @@ export default function Create() {
   };
 
   const handleReset = useCallback(() => {
-    setSelectedFiles([]);
-    setWorkbookData(null);
-    setTemplateFile(null);
-    setTemplateData(null);
-    setTemplateFiles([]); // Clear template files array
-    setGeneratedTemplate(null);
-    setShowMapping(false);
-    setMappings({});
-    setUploadedFiles([]);
-    setActiveFile(null);
-    toast.success('All data has been reset successfully');
-  }, []);
-
-  const handleNavigation = (path) => {
-    if (showMapping && Object.keys(mappings).length > 0) {
-      setShowNavigationModal(true);
-      setPendingNavigation(path);
-    } else {
-      router.push(path);
-    }
-  };
-
-  const handleConfirmNavigation = () => {
-    setShowNavigationModal(false);
-    router.push(pendingNavigation);
-  };
-
-  const handleCancelNavigation = () => {
-    setShowNavigationModal(false);
-    setPendingNavigation('');
-  };
+    handleNavigation('/create');
+  }, [handleNavigation]);
 
   useEffect(() => {
     // Update hasChanges in localStorage whenever files or mappings change
     const hasChanges = uploadedFiles.length > 0 || templateFiles.length > 0 || Object.keys(mappings).length > 0;
-    localStorage.setItem('hasChanges', hasChanges);
+    localStorage.setItem('/create-hasChanges', hasChanges);
 
     return () => {
-      localStorage.removeItem('hasChanges');
+      localStorage.removeItem('/create-hasChanges');
     };
   }, [uploadedFiles, templateFiles, mappings]);
 
@@ -720,14 +693,6 @@ export default function Create() {
           </div>
         </div>
       </main>
-      {showNavigationModal && (
-        <ConfirmationModal
-          title="Confirm Navigation"
-          message="You have unsaved changes. Are you sure you want to navigate away?"
-          onConfirm={handleConfirmNavigation}
-          onCancel={handleCancelNavigation}
-        />
-      )}
     </>
   );
 }
