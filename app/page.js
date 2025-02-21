@@ -44,7 +44,7 @@ const Home = () => {
         {/* Hero Section */}
         <section className="text-center mb-10 animate-fadeIn">
           <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600 mb-4">
-            Free Excel Mapping Templates
+            Excel Mapping Templates
           </h1>
           <div className="max-w-3xl mx-auto">
             <p className="text-base md:text-lg text-gray-600 mb-4">
